@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "graph/node_xml.h"
+#include "graph/node_xml_bin.h"
 
 #include "scene/background.h"
 #include "scene/camera.h"
@@ -28,7 +28,7 @@
 #include "util/transform.h"
 #include "util/xml.h"
 
-#include "app/cycles_xml.h"
+#include "app/cycles_xml_bin.h"
 
 CCL_NAMESPACE_BEGIN
 
