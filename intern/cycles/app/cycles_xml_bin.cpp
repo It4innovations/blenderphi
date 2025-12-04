@@ -39,8 +39,11 @@
 
 #include "app/cycles_xml_bin.h"
 
-#include <openvdb/io/Stream.h>
-#include <nanovdb/io/IO.h>
+#ifdef WITH_OPENVDB
+#	include <openvdb/io/Stream.h>
+//#	include <nanovdb/io/IO.h>
+#	include <nanovdb/util/IO.h>
+#endif
 
 #include "scene/image_oiio.h"
 
@@ -612,6 +615,7 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 			const xml_attribute attr_volume_type = node_attribute.attribute("volume_type");
 			if (attr_volume_type) {
 				ustring volume_type(attr_volume_type.value());
+#ifdef WITH_OPENVDB				
 				if (volume_type == "openvdb") {
 					//std::stringstream ss;
 					//ss << attr_buffer;
@@ -678,11 +682,14 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 						nanogrid.resize(nanogrid_size);
 						memcpy(nanogrid.data(), grid_handle.data(), nanogrid_size);						
 					}
+
 					unique_ptr<ImageLoader> loader = make_unique<NanoVDBImageLoader>(nanogrid);
 					const ImageParams params;
 					attr->data_voxel() = state.scene->image_manager->add_image(std::move(loader), params, false);
 				}
-				else if (volume_type == "raw") {
+				else 
+#endif				
+				if (volume_type == "raw") {
 					vector<char> raw_data;
 					std::string filename = attr_buffer.value();
 
@@ -1024,13 +1031,14 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 				if (attr.name == attr_name) {
 					//openvdb::GridBase::Ptr float_grid;
 
-					openvdb::initialize();
-
 					device_texture* dt = attr.data_voxel().image_memory();
 					//dt->device_free();
 					//dt->host_free();
 
 					unique_ptr<ImageLoader> loader = nullptr;
+
+#ifdef WITH_OPENVDB	
+					openvdb::initialize();				
 
 					if (type == FTI_OPENVDB) {
 						// Convert the vector<uint8_t> back into a stringstream
@@ -1096,7 +1104,7 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 
 						//return;
 					}
-
+#endif
 					//else {
 					//	return;
 					//}
@@ -1134,13 +1142,13 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 				if (attr.name == attr_name) {				
 					//openvdb::GridBase::Ptr float_grid;
 
-					openvdb::initialize();
-
 					device_texture* dt = attr.data_voxel().image_memory();
 					//dt->device_free();
 					//dt->host_free();
 
 					//ImageLoader* loader = nullptr;		
+#ifdef WITH_OPENVDB					
+					openvdb::initialize();
 
 					if (type == FTI_OPENVDB) {
 						// Convert the vector<uint8_t> back into a stringstream
@@ -1203,7 +1211,7 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 
 						//return;
 					}
-
+#endif
 					//else {
 					//	return;
 					//}

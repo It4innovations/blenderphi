@@ -117,6 +117,23 @@ class BlenderSession {
 
   static bool print_render_stats;
 
+  //BRAAS-HPC
+  void *braas_hpc_options;
+  int braas_hpc_run();
+  int braas_hpc_cyclesphi(void* blenderClientTcp);
+  void braas_hpc_render_frame();
+  ccl::BufferParams& braas_hpc_session_buffer_params();
+  void braas_hpc_session_init(SessionParams& params, SceneParams& scene_params);
+
+  SessionParams get_session_params(BL::RenderEngine& b_engine,
+    BL::Preferences& b_preferences,
+    BL::Scene& b_scene,
+    bool background);
+
+  SceneParams get_scene_params(BL::Scene& b_scene,
+    const bool background,
+    const bool use_developer_ui);
+
  protected:
   void stamp_view_layer_metadata(Scene *scene, const string &view_layer_name);
 

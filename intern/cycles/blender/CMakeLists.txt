@@ -2,6 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+if(WITH_CLIENT_GPUJPEG)
+  find_package(GPUJPEG REQUIRED)
+endif()
+
+find_package(braas_hpc_renderengine REQUIRED)
+
 set(INC
   ..
   ../../../source/blender/makesrna
@@ -49,6 +55,12 @@ set(SRC
   session.h
   util.h
   viewport.h
+
+  ../app/cycles_xml_bin.cpp
+  ../app/cycles_xml_bin.h
+
+  braas_hpc_display_driver.cpp
+  braas_hpc_display_driver.h
 )
 
 set(LIB
@@ -73,6 +85,7 @@ set(LIB
   ${Epoxy_LIBRARIES}
   ${PYTHON_LINKFLAGS}
   ${PYTHON_LIBRARIES}
+  braas_hpc_renderengine::braas_hpc_renderengine
 )
 
 set(ADDON_FILES
@@ -86,6 +99,10 @@ set(ADDON_FILES
   addon/ui.py
   addon/version_update.py
 )
+
+if(WITH_CLIENT_GPUJPEG)
+	add_definitions(-DWITH_CLIENT_GPUJPEG)
+endif()
 
 if(WITH_CYCLES_DEVICE_HIP)
   add_definitions(-DWITH_HIP)

@@ -34,7 +34,53 @@
 #include "blender/sync.h"
 #include "blender/util.h"
 
+// BRAAS-HPC
+#include "braas_hpc_display_driver.h"
+#include "renderengine_tcp.h"
+#include "renderengine_data.h"
+#include "app/cycles_xml_bin.h"
+
+#ifdef DEBUG_TIME
+#	define DEBUG_START_TIME(name) double t1_##name = omp_get_wtime();
+#	define DEBUG_END_TIME(name) double t2_##name = omp_get_wtime(); printf("Elapsed time: %f, FPS: %f, %s\n", t2_##name - t1_##name, 1.0 / (t2_##name - t1_##name), #name);
+#else
+#	define DEBUG_START_TIME(name)
+#	define DEBUG_END_TIME(name)
+#endif
+
 CCL_NAMESPACE_BEGIN
+
+// BRAAS-HPC
+struct BraaSHPCOptions {
+    int id = 0;
+
+    //Session* session = nullptr;
+    //Scene* scene = nullptr;
+    std::string filepath;
+    int width, height;
+    SceneParams scene_params;
+    SessionParams session_params;
+    bool quiet;
+    bool show_help, interactive, pause;
+    //std::string output_filepath;
+    std::string output_pass;
+    int session_samples = 0;
+
+    //FrameOutputDriver* output_driver = nullptr;
+    BRaaSHPCDisplayDriver* display_driver = nullptr;
+};
+
+renderengine_data g_renderengine_data_rcv;
+//std::vector<renderengine_data> g_renderengine_datas;
+renderengine_data g_renderengine_data;
+double fps_previous_time = 0;
+int fps_frame_count = 0;
+
+struct CyclesphiDataRenderAux {
+    std::vector<char> data;
+};
+
+///////
 
 DeviceTypeMask BlenderSession::device_override = DEVICE_MASK_ALL;
 bool BlenderSession::headless = false;
@@ -67,6 +113,14 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
   last_redraw_time = 0.0;
   start_resize_time = 0.0;
   last_status_time = 0.0;
+  braas_hpc_options = nullptr;
+
+  //BRAAS-HPC
+  const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
+  if (env_p != nullptr) {
+      braas_hpc_options = new BraaSHPCOptions();
+      background = false;
+  }
 }
 
 BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
@@ -99,18 +153,456 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
   last_redraw_time = 0.0;
   start_resize_time = 0.0;
   last_status_time = 0.0;
+  braas_hpc_options = nullptr;
+
+  //BRAAS-HPC
+  const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
+  if (env_p != nullptr) {
+      braas_hpc_options = new BraaSHPCOptions();
+      //background = false;
+  }
 }
 
 BlenderSession::~BlenderSession()
 {
   free_session();
+
+  if (braas_hpc_options) {
+	  delete (BraaSHPCOptions*)braas_hpc_options;
+	  braas_hpc_options = nullptr;
+  }
 }
+
+////////////////////////////////////////BRAAS-HPC
+
+SessionParams BlenderSession::get_session_params(BL::RenderEngine& b_engine,
+    BL::Preferences& b_preferences,
+    BL::Scene& b_scene,
+    bool background) {
+
+    if (braas_hpc_options) {
+		BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+		return options->session_params;
+    }
+
+    return BlenderSync::get_session_params(
+        b_engine, b_userpref, b_scene, background);
+}
+
+SceneParams BlenderSession::get_scene_params(BL::Scene& b_scene,
+    const bool background,
+    const bool use_developer_ui) {
+
+    if (braas_hpc_options) {
+		BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+		return options->scene_params;
+	}
+
+    return BlenderSync::get_scene_params(
+        b_scene, background, use_developer_ui);
+}
+
+BufferParams& BlenderSession::braas_hpc_session_buffer_params()
+{
+    BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+    static BufferParams buffer_params;
+    buffer_params.width = options->width;
+    buffer_params.height = options->height;
+    buffer_params.full_width = options->width;
+    buffer_params.full_height = options->height;
+
+    return buffer_params;
+}
+
+void BlenderSession::braas_hpc_session_init(SessionParams& session_params, SceneParams& scene_params)
+{
+    BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+
+    options->session_samples = 0;
+    session_params.background = background;
+    session_params.headless = false;
+    session_params.use_auto_tile = false;
+    session_params.tile_size = 16;
+    session_params.use_resolution_divider = false;
+    session_params.samples = 1;
+
+    //session_params.threads = 1;
+
+    options->output_pass = "combined";
+
+    //session = new Session(options->session_params, options->scene_params);
+    session = make_unique<Session>(session_params, scene_params);
+
+    auto display_driver = make_unique<BRaaSHPCDisplayDriver>();
+    options->display_driver = display_driver.get();
+    session->set_display_driver(std::move(display_driver));
+
+    //if (options->session_params.background && !options->quiet) {
+    //    session->progress.set_update_callback([&options]() {session_print_status(options); });
+    //}
+
+    /* load scene */
+    //scene_init(options);
+
+    /* add pass for output. */
+    //Pass* pass = scene->create_node<Pass>();
+    //pass->set_name(ustring(options->output_pass.c_str()));
+    //pass->set_type(PASS_COMBINED);
+
+    options->session_params = session_params;
+    options->scene_params = scene_params;
+}
+
+void BlenderSession::braas_hpc_render_frame()
+{
+    BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+
+    //if (options->display_driver)
+    //    options->display_driver->renderBegin();
+
+    if (options->session_samples == 0) { // reset
+        session->reset(options->session_params, braas_hpc_session_buffer_params());
+    }
+
+    //if(options->output_driver)
+    //	options->output_driver->renderBegin();
+
+    session->set_samples(++options->session_samples);
+    session->start();
+
+    //session->wait();
+    //session->draw();
+
+    //if (options->output_driver)
+    //	options->output_driver->wait();		
+
+    //if (options->display_driver)
+    //    options->display_driver->wait();
+
+    //session->start();
+    //session->wait();
+}
+
+int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
+{
+	TcpConnection* blenderClientTcp = (TcpConnection*)_blenderClientTcp;
+    ////////////////////////////////////////////////////
+    double render_time = 0;
+    double render_time_accu = 0;
+    int spp_one_step = 0;
+
+    std::vector<char> pixels_buf_empty;
+    CyclesphiDataRenderAux data_render_aux_rcv;
+    //std::vector<CyclesphiDataRenderAux> data_render_aux;
+    CyclesphiDataRenderAux data_render_aux;
+
+    /////////
+    //int renderengine_data_count = 1;
+    //g_renderengine_datas.resize(renderengine_data_count);
+
+    BraaSHPCOptions* main_options = (BraaSHPCOptions*)braas_hpc_options; //&options[0];
+    renderengine_data* main_renderengine_data = &g_renderengine_data;
+
+    //data_render_aux.resize(renderengine_data_count);
+    CyclesphiDataRenderAux* main_data_render_aux = &data_render_aux;
+    /////////
+
+    BRaaSHPCDataState cyclesphiDataState;
+    memset(&cyclesphiDataState, 0, sizeof(cyclesphiDataState));
+
+    ///////////////////
+    BoundBox bbox_scene = BoundBox::empty;
+    bool bbox_computed = false;
+    ///////////////////
+    bool render_running = true;
+
+    //session_print("Start rendering...\n");
+
+    while (render_running) {
+        DEBUG_START_TIME(overall);
+
+        DEBUG_START_TIME(receive);
+
+        blenderClientTcp->recv_data_data((char*)&g_renderengine_data_rcv, sizeof(renderengine_data));
+        if (blenderClientTcp->is_error()) {
+            break;
+        }
+
+        if (g_renderengine_data_rcv.reset) {
+            break;
+        }
+
+        if (g_renderengine_data_rcv.width == 0 || g_renderengine_data_rcv.height == 0) {
+            printf("width or height is 0!!!!\n");
+            fflush(0);
+            //exit(-1);
+            break;
+        }
+
+        blenderClientTcp->set_frame(g_renderengine_data_rcv.frame);
+
+        // check animation
+        //if (options->size() > 1 && blenderClientTcp->get_frame() >= 0 && blenderClientTcp->get_frame() < options->size()) {
+        //    main_options = &options[blenderClientTcp->get_frame()];
+        //    main_renderengine_data = &g_renderengine_datas[blenderClientTcp->get_frame()];
+        //    main_data_render_aux = &data_render_aux[blenderClientTcp->get_frame()];
+        //}
+
+        g_renderengine_data_rcv.frame = main_renderengine_data->frame;
+
+        int cyclesphiDataRenderSize = 0;
+        blenderClientTcp->recv_data_data((char*)&cyclesphiDataRenderSize, sizeof(int));
+
+        if (data_render_aux_rcv.data.size() != cyclesphiDataRenderSize) {
+            data_render_aux_rcv.data.resize(cyclesphiDataRenderSize);
+        }
+
+        if (data_render_aux_rcv.data.size() > 0) {
+            blenderClientTcp->recv_data_data((char*)data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
+            data_render_aux_rcv.data.push_back('\0');
+        }
+
+        if (blenderClientTcp->is_error()) {
+            //throw std::runtime_error("TCP Error!");
+            break;
+        }
+
+        if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+            pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        }
+
+        DEBUG_END_TIME(receive);
+
+        try {
+            // cam_change
+            if (/*renderer == NULL || */ memcmp(main_renderengine_data, &g_renderengine_data_rcv, sizeof(renderengine_data))) {
+                DEBUG_START_TIME(camera);
+                memcpy(main_renderengine_data, &g_renderengine_data_rcv, sizeof(renderengine_data));
+
+                render_time = 0;
+                render_time_accu = 0;
+
+                main_options->session_samples = 0;
+
+                if (g_renderengine_data_rcv.reset || main_options->width != g_renderengine_data_rcv.width
+                    || main_options->height != g_renderengine_data_rcv.height) {
+
+                    main_options->width = g_renderengine_data_rcv.width;
+                    main_options->height = g_renderengine_data_rcv.height;
+                }
+
+                float* input = g_renderengine_data_rcv.cam.transform_inverse_view_matrix;
+
+                // Convert to Transform
+                Transform tfm = transform_clear_scale(make_transform(
+                    input[0], input[1], input[2],   // First row
+                    input[3], input[4], input[5],   // Second row
+                    input[6], input[7], input[8],   // Third row
+                    input[9], input[10], input[11]  // Fourth row (Translation vector)
+                ) * transform_scale(1.0f, 1.0f, -1.0f));
+
+                scene->camera->set_matrix(tfm);
+                scene->camera->set_full_width(main_options->width);
+                scene->camera->set_full_height(main_options->height);
+
+                scene->camera->set_nearclip(g_renderengine_data_rcv.cam.clip_start);
+                scene->camera->set_farclip(g_renderengine_data_rcv.cam.clip_end);
+
+                scene->camera->need_flags_update = true;
+                scene->camera->need_device_update = true;
+
+                //perspective
+                scene->camera->set_fov(g_renderengine_data_rcv.cam.lens);
+
+                if (g_renderengine_data_rcv.cam.view_perspective == 1) { //CAMERA_ORTHOGRAPHIC
+                    scene->camera->set_camera_type(CameraType::CAMERA_ORTHOGRAPHIC);
+                }
+                else {
+                    scene->camera->set_camera_type(CameraType::CAMERA_PERSPECTIVE);
+                }
+
+                float xratio = (float)main_options->width;
+                float yratio = (float)main_options->height;
+                bool horizontal_fit = (xratio > yratio);
+
+                float aspectratio;
+                float xaspect, yaspect;
+                if (horizontal_fit) {
+                    aspectratio = xratio / yratio;
+                    xaspect = aspectratio;
+                    yaspect = 1.0f;
+                }
+                else {
+                    aspectratio = yratio / xratio;
+                    xaspect = 1.0f;
+                    yaspect = aspectratio;
+                }
+
+                if (g_renderengine_data_rcv.cam.view_perspective == 1) { //CAMERA_ORTHOGRAPHIC
+                    float ortho_scale = g_renderengine_data_rcv.cam.lens / 2.0f;
+                    xaspect = xaspect * ortho_scale;// / (aspectratio * 2.0f);
+                    yaspect = yaspect * ortho_scale;// / (aspectratio * 2.0f);
+                    //aspectratio = ortho_scale / 2.0f;					
+                }
+
+                scene->camera->set_viewplane_left(-xaspect);
+                scene->camera->set_viewplane_right(xaspect);
+                scene->camera->set_viewplane_bottom(-yaspect);
+                scene->camera->set_viewplane_top(yaspect);
+
+                DEBUG_END_TIME(camera);
+            }
+
+            // if (renderer == NULL) {
+            // 	continue;
+            // }
+
+            if (data_render_aux_rcv.data.size() != main_data_render_aux->data.size()) {
+                DEBUG_START_TIME(resize_rcv_data);
+                main_data_render_aux->data.resize(data_render_aux_rcv.data.size());
+                DEBUG_END_TIME(resize_rcv_data);
+            }
+
+            if (data_render_aux_rcv.data.size() > 0 && memcmp(main_data_render_aux->data.data(), data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size())) {
+                DEBUG_START_TIME(material);
+                memcpy(main_data_render_aux->data.data(), data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
+
+                main_options->session_samples = 0;
+                render_time = 0;
+                render_time_accu = 0;
+
+                xml_set_material_to_shader(scene, main_data_render_aux->data.data());
+                DEBUG_END_TIME(material);
+            }
+
+            /////////////////////////////////////////////////
+            DEBUG_START_TIME(render);
+            braas_hpc_render_frame();
+            DEBUG_END_TIME(render);
+
+#ifdef WITH_CLIENT_GPUJPEG     
+            if (main_options->display_driver) {
+                DEBUG_START_TIME(send_gpujpeg_display);
+                if (main_options->display_driver->d_pixels) {
+                    blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                }
+                else {
+                    blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                }
+                DEBUG_END_TIME(send_gpujpeg_display);
+            }
+            //else if (main_options->output_driver) {
+            //	DEBUG_START_TIME(send_gpujpeg_output);
+            //	blenderClientTcp->send_gpujpeg((char*)main_options->output_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+            //	DEBUG_END_TIME(send_gpujpeg_output);
+            //}
+#else
+            if (main_options->display_driver) {
+                DEBUG_START_TIME(send_gpujpeg_display);
+                blenderClientTcp->send_data_data((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.size());
+                DEBUG_END_TIME(send_gpujpeg_display);
+            }
+#endif
+            if (blenderClientTcp->is_error()) {
+                throw std::runtime_error("TCP Error!");
+            }
+
+            if (!bbox_computed) {
+                DEBUG_START_TIME(bbox_computed);
+                for (Object* object : scene->objects) {
+                    bbox_scene.grow(object->bounds);
+                }
+
+                cyclesphiDataState.world_bounds_spatial_lower[0] = bbox_scene.min[0];
+                cyclesphiDataState.world_bounds_spatial_lower[1] = bbox_scene.min[1];
+                cyclesphiDataState.world_bounds_spatial_lower[2] = bbox_scene.min[2];
+                cyclesphiDataState.world_bounds_spatial_upper[0] = bbox_scene.max[0];
+                cyclesphiDataState.world_bounds_spatial_upper[1] = bbox_scene.max[1];
+                cyclesphiDataState.world_bounds_spatial_upper[2] = bbox_scene.max[2];
+
+                bbox_computed = true;
+                DEBUG_END_TIME(bbox_computed);
+            }
+
+            DEBUG_START_TIME(send_data_state);
+            float duration = 0;
+            //if (main_options->output_driver)
+            //	duration = main_options->output_driver->duration;
+            if (main_options->display_driver)
+                duration = main_options->display_driver->duration;
+
+            cyclesphiDataState.fps = (float)main_options->session_params.samples / duration;//fps;
+            cyclesphiDataState.samples = main_options->session_samples;//total_samples;
+            blenderClientTcp->send_data_data((char*)&cyclesphiDataState, sizeof(cyclesphiDataState));
+            DEBUG_END_TIME(send_data_state);
+
+            if (blenderClientTcp->is_error()) {
+                throw std::runtime_error("TCP Error!");
+            }
+        }
+        catch (const std::exception& ex)
+        {
+            std::cerr << ex.what();
+            //exit(-1);
+            break;
+        }
+
+        DEBUG_END_TIME(overall);
+    }
+
+    //////////////////////////////////////////////////// 	
+
+    // reset
+    memset(&g_renderengine_data_rcv, 0, sizeof(g_renderengine_data_rcv));
+
+    //g_renderengine_datas.clear();
+
+    return 0;
+}
+
+int BlenderSession::braas_hpc_run()
+{
+    //FromCL fromCL;
+    //fromCL.parse_args(ac, av);
+
+    //std::vector<BraaSHPCOptions> options(fromCL.anim > 0 ? fromCL.anim : 1);
+
+    TcpConnection blenderClientTcp;
+    //blenderClientTcp.init_sockets_data("localhost", fromCL.port);
+
+    //for (int i = 0; i < options->size(); i++) {
+    //    auto& op = options[i];
+    //    session_init(fromCL, op, i);
+    //}
+
+    int server_port = getenv("CYCLES_BRAAS_HPC_SERVER_PORT") ? atoi(getenv("CYCLES_BRAAS_HPC_SERVER_PORT")) : 7000;
+
+    while (true) {
+
+        //if (blenderClientTcp.is_error()) 
+        {
+            blenderClientTcp.client_close();
+            blenderClientTcp.server_close();
+            blenderClientTcp.init_sockets_data("localhost", server_port);
+        }
+
+        braas_hpc_cyclesphi(&blenderClientTcp);
+    }
+
+    //for (auto& op : options) {
+    //    session_exit(fromCL, op);
+    //}
+
+    return 0;
+}
+
+/////////////////////////////////////////////////
 
 void BlenderSession::create_session()
 {
-  const SessionParams session_params = BlenderSync::get_session_params(
+  SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
-  const SceneParams scene_params = BlenderSync::get_scene_params(
+  SceneParams scene_params = BlenderSync::get_scene_params(
       b_scene, background, use_developer_ui);
   const bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
@@ -121,7 +613,14 @@ void BlenderSession::create_session()
   start_resize_time = 0.0;
 
   /* create session */
-  session = make_unique<Session>(session_params, scene_params);
+  //BRAAS-HPC
+  if (braas_hpc_options) {
+	  braas_hpc_session_init(session_params, scene_params);
+  }
+  else {
+      session = make_unique<Session>(session_params, scene_params);
+  }
+  
   session->progress.set_update_callback([this] { tag_redraw(); });
   session->progress.set_cancel_callback([this] { test_cancel(); });
   session->set_pause(session_pause);
@@ -194,9 +693,9 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
     return;
   }
 
-  const SessionParams session_params = BlenderSync::get_session_params(
+  const SessionParams session_params = get_session_params(
       b_engine, b_userpref, b_scene, background);
-  const SceneParams scene_params = BlenderSync::get_scene_params(
+  const SceneParams scene_params = get_scene_params(
       b_scene, background, use_developer_ui);
 
   if (scene->params.modified(scene_params) || session->params.modified(session_params) ||
@@ -334,15 +833,17 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   }
 
   /* Create driver to write out render results. */
-  ensure_display_driver_if_needed();
-  session->set_output_driver(make_unique<BlenderOutputDriver>(b_engine));
+  if (!braas_hpc_options) {
+    ensure_display_driver_if_needed();
+    session->set_output_driver(make_unique<BlenderOutputDriver>(b_engine));
 
-  session->full_buffer_written_cb = [&](string_view filename) { full_buffer_written(filename); };
+    session->full_buffer_written_cb = [&](string_view filename) { full_buffer_written(filename); };
+  }
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
   /* get buffer parameters */
-  const SessionParams session_params = BlenderSync::get_session_params(
+  const SessionParams session_params = get_session_params(
       b_engine, b_userpref, b_scene, background);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
       b_v3d, b_rv3d, scene->camera, width, height);
@@ -442,8 +943,12 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
       scene->enable_update_stats();
     }
 
-    session->start();
-    session->wait();
+    if (braas_hpc_options) {
+      braas_hpc_run();
+    } else {
+      session->start();
+      session->wait();
+    }
 
     if (!b_engine.is_preview() && background && print_render_stats) {
       RenderStats stats;
@@ -675,7 +1180,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
   b_depsgraph = b_depsgraph_;
 
   /* Get session parameters. */
-  const SessionParams session_params = BlenderSync::get_session_params(
+  const SessionParams session_params = get_session_params(
       b_engine, b_userpref, b_scene, background);
 
   /* Initialize bake manager, before we load the baking kernels. */
@@ -774,9 +1279,9 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   }
 
   /* on session/scene parameter changes, we recreate session entirely */
-  const SessionParams session_params = BlenderSync::get_session_params(
+  const SessionParams session_params = get_session_params(
       b_engine, b_userpref, b_scene, background);
-  const SceneParams scene_params = BlenderSync::get_scene_params(
+  const SceneParams scene_params = get_scene_params(
       b_scene, background, use_developer_ui);
   const bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
@@ -936,7 +1441,7 @@ void BlenderSession::view_draw(const int w, const int h)
 
     /* reset if requested */
     if (reset) {
-      const SessionParams session_params = BlenderSync::get_session_params(
+      const SessionParams session_params = get_session_params(
           b_engine, b_userpref, b_scene, background);
       const BufferParams buffer_params = BlenderSync::get_buffer_params(
           b_v3d, b_rv3d, scene->camera, width, height);

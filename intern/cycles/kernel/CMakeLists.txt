@@ -476,6 +476,11 @@ function(cuda_add_common_flags cuda_version arch in_flags out_flags)
     --use_fast_math
     -Wno-deprecated-gpu-targets)
 
+  if(WITH_GPU_CPUIMAGE)
+    set(flags ${flags}
+      -D WITH_GPU_CPUIMAGE)
+  endif()
+
   if(WITH_CYCLES_DEBUG)
     set(flags ${flags}
       -D WITH_CYCLES_DEBUG
@@ -725,6 +730,11 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIP)
         -D WITH_NANOVDB)
     endif()
 
+    if(WITH_GPU_CPUIMAGE)
+      set(hip_flags ${hip_flags}
+        -D WITH_GPU_CPUIMAGE)
+    endif()
+
     if(WITH_CYCLES_DEBUG)
       set(hip_flags ${hip_flags} -D WITH_CYCLES_DEBUG)
     endif()
@@ -768,6 +778,10 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIPRT)
 
   if(WITH_NANOVDB)
     set(hiprt_compile_flags ${hiprt_compile_flags} -D WITH_NANOVDB)
+  endif()
+
+  if(WITH_GPU_CPUIMAGE)
+    set(hiprt_compile_flags ${hiprt_compile_flags} -D WITH_GPU_CPUIMAGE)
   endif()
 
   if(WITH_CYCLES_DEBUG)
@@ -978,6 +992,10 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
     -I"${CMAKE_CURRENT_SOURCE_DIR}/.."
     ${SYCL_CPP_FLAGS}
   )
+
+  if(WITH_GPU_CPUIMAGE)
+    list(APPEND sycl_compiler_flags -DWITH_GPU_CPUIMAGE)
+  endif()
 
   if(WITH_CYCLES_ONEAPI_HOST_TASK_EXECUTION)
     list(APPEND sycl_compiler_flags -DWITH_ONEAPI_SYCL_HOST_TASK)
