@@ -664,6 +664,9 @@ mark_as_advanced(WITH_CYCLES_PRECOMPUTE)
 mark_as_advanced(CYCLES_TEST_DEVICES)
 mark_as_advanced(WITH_CYCLES_TEST_OSL)
 
+# CyclesPhi
+option(WITH_CLIENT_GPUJPEG "Enable GPUJPEG" OFF)
+
 # NVIDIA CUDA & OptiX
 if(NOT APPLE AND NOT (WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64"))
   option(WITH_CYCLES_DEVICE_CUDA "Enable Cycles NVIDIA CUDA compute support" ON)

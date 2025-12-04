@@ -612,7 +612,8 @@ bool oneapi_enqueue_kernel(KernelContext *kernel_context,
 
 #  define DEVICE_KERNEL_FILM_CONVERT(variant, VARIANT) \
       DEVICE_KERNEL_FILM_CONVERT_PARTIAL(VARIANT, variant) \
-      DEVICE_KERNEL_FILM_CONVERT_PARTIAL(VARIANT##_HALF_RGBA, variant##_half_rgba)
+      DEVICE_KERNEL_FILM_CONVERT_PARTIAL(VARIANT##_HALF_RGBA, variant##_half_rgba) \
+      DEVICE_KERNEL_FILM_CONVERT_PARTIAL(VARIANT##_BYTE_RGBA, variant##_byte_rgba)
 
       DEVICE_KERNEL_FILM_CONVERT(depth, DEPTH);
       DEVICE_KERNEL_FILM_CONVERT(mist, MIST);
