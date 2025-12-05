@@ -14,8 +14,25 @@ CCL_NAMESPACE_BEGIN
  */
 
 BRaaSHPCDisplayDriver::BRaaSHPCDisplayDriver()
-	: d_pixels(nullptr), duration(0.0f) //render_finished(true),
 {
+	d_pixels = nullptr;
+	duration = 0.0f;	
+	width = 0;
+	height = 0;
+	use_gpujpeg = false;
+	render_finished = 1;
+
+	const char* env_use_gpujpeg = getenv("CYCLES_BRAAS_HPC_USE_GPUJPEG");
+	if (env_use_gpujpeg) {
+		int enabled = atoi(env_use_gpujpeg);
+		if (enabled) {
+#ifdef WITH_CLIENT_GPUJPEG
+			use_gpujpeg = true;
+#else
+			printf("BRaaSHPCDisplayDriver (enable_gpujpeg): Not compiled with GPUJPEG support\n");
+#endif	
+		}
+	}
 }
 
 BRaaSHPCDisplayDriver::~BRaaSHPCDisplayDriver() {}
@@ -36,55 +53,52 @@ bool BRaaSHPCDisplayDriver::update_begin(const Params& /*params*/, int texture_w
 	width = texture_width;
 	height = texture_height;
 
+	if (pixels.size() != width * height) {
+		pixels.resize(width * height);
+	}
+
 	return true;
 }
 
 void BRaaSHPCDisplayDriver::update_end()
 {
-	auto end = std::chrono::steady_clock::now();
-	duration = std::chrono::duration<float>(end - start).count();
-	//renderEnd();
+	renderEnd();
 }
 
-//void BRaaSHPCDisplayDriver::renderBegin()
-//{
-//	//std::lock_guard<std::mutex> lock(mutex);
-//	thread_scoped_lock lock(mutex);
-//	start = std::chrono::steady_clock::now();
-//	render_finished = false;
-//	//render_finished.store(false, std::memory_order_release);
-//	//print("renderBegin()\n"); fflush(0);
-//}
+void BRaaSHPCDisplayDriver::renderBegin()
+{
+	/* Signal session thread to start. */
+	{
+		const thread_scoped_lock session_thread_lock(mutex);
+		render_finished = 0;
+	}
+	cv.notify_all();
+}
 
-//void BRaaSHPCDisplayDriver::renderEnd()
-//{
-//	//std::lock_guard<std::mutex> lock(mutex);
-//	thread_scoped_lock lock(mutex);
-//
-//	auto end = std::chrono::steady_clock::now();
-//	duration = std::chrono::duration<float>(end - start).count();
-//
-//	render_finished = true;
-//	//render_finished.store(true, std::memory_order_release);
-//
-//	// Notify the wait thread
-//	cv.notify_all();
-//	//print("renderEnd()\n"); fflush(0);
-//}
+void BRaaSHPCDisplayDriver::renderEnd()
+{
+	auto end = std::chrono::steady_clock::now();
+	duration = std::chrono::duration<float>(end - start).count();
 
-//void BRaaSHPCDisplayDriver::wait()
-//{
-//	//thread_scoped_lock lock(mutex);
-//	//cv.wait(lock, [this] { return render_finished; });
-//	while (true) {
-//		thread_scoped_lock session_thread_lock(mutex);
-//		if (render_finished) {
-//			break;
-//		}
-//		cv.wait(session_thread_lock);
-//	}
-//}
-//
+	/* Signal session thread to end. */
+	{
+		const thread_scoped_lock session_thread_lock(mutex);
+		render_finished = 1;
+	}
+	cv.notify_all();
+}
+
+void BRaaSHPCDisplayDriver::wait()
+{
+	while (true) {
+		thread_scoped_lock session_thread_lock(mutex);
+		if (render_finished == 1) {
+			break;
+		}
+		cv.wait(session_thread_lock);
+	}
+}
+
 //bool BRaaSHPCDisplayDriver::ready() const
 //{
 //	return render_finished;

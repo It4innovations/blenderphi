@@ -21,8 +21,7 @@ class BRaaSHPCDisplayDriver : public DisplayDriver {
  public:
   /* Callbacks for enabling and disabling the OpenGL context. Must be provided to support enabling
    * the context on the Cycles render thread independent of the main thread. */
-  BRaaSHPCDisplayDriver(/*const function<bool()>& gl_context_enable,
-                      const function<void()> &gl_context_disable*/);
+  BRaaSHPCDisplayDriver();
   ~BRaaSHPCDisplayDriver();
 
   //virtual void graphics_interop_activate() override;
@@ -49,41 +48,37 @@ class BRaaSHPCDisplayDriver : public DisplayDriver {
 
   virtual bool only_device_buffer() override 
   { 
-#ifdef WITH_CLIENT_GPUJPEG
-	  return true;
-#else
-	  return false;
-#endif
+	  return use_gpujpeg;
   };
 
   virtual bool buffer_linear2srgb() override 
   { 
-//#ifdef WITH_CLIENT_GPUJPEG
-//	  return true;
-//#else
-//	  return false;
-//#endif
     return false;
   };
 
-  //void renderBegin();
-  //void renderEnd();
+  void renderBegin();
+  void renderEnd();
 
-  //void wait();
+  void wait();
   //bool ready() const;
+
+  bool is_gpujpeg() { return use_gpujpeg; };
 
 public:
 	vector<half4> pixels;
 	void* d_pixels;
-	//bool render_finished;
+	int render_finished;
 	//std::atomic<bool> render_finished;
-	//thread_mutex mutex;
-	//thread_condition_variable cv;
-	std::chrono::time_point<std::chrono::steady_clock> start;
+
+  thread_mutex mutex;
+	thread_condition_variable cv;
+
+  std::chrono::time_point<std::chrono::steady_clock> start;
 	float duration;
 
-	int width = 0;
-	int height = 0;
+  bool use_gpujpeg;
+	int width;
+	int height;
 };
 
 CCL_NAMESPACE_END
