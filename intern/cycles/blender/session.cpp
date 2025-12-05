@@ -257,8 +257,8 @@ void BlenderSession::braas_hpc_render_frame()
 {
     BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
 
-    //if (options->display_driver)
-    //    options->display_driver->renderBegin();
+    if (options->display_driver)
+        options->display_driver->renderBegin();
 
     if (options->session_samples == 0) { // reset
         session->reset(options->session_params, braas_hpc_session_buffer_params());
@@ -274,10 +274,10 @@ void BlenderSession::braas_hpc_render_frame()
     //session->draw();
 
     //if (options->output_driver)
-    //	options->output_driver->wait();		
+    //	options->output_driver->wait();
 
-    //if (options->display_driver)
-    //    options->display_driver->wait();
+    if (options->display_driver)
+        options->display_driver->wait();
 
     //session->start();
     //session->wait();
@@ -479,30 +479,26 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             DEBUG_START_TIME(render);
             braas_hpc_render_frame();
             DEBUG_END_TIME(render);
-
-#ifdef WITH_CLIENT_GPUJPEG     
+            /////////////////////////////////////////////////
             if (main_options->display_driver) {
-                DEBUG_START_TIME(send_gpujpeg_display);
-                if (main_options->display_driver->d_pixels) {
-                    blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                if (main_options->display_driver->is_gpujpeg()) {
+                    DEBUG_START_TIME(send_gpujpeg_display);
+                    if (main_options->display_driver->d_pixels) {
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                    }
+                    else {
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                    }
+                    DEBUG_END_TIME(send_gpujpeg_display);
                 }
                 else {
-                    blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+
+                    DEBUG_START_TIME(send_gpujpeg_display);
+                    blenderClientTcp->send_data_data((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.size());
+                    DEBUG_END_TIME(send_gpujpeg_display);
                 }
-                DEBUG_END_TIME(send_gpujpeg_display);
             }
-            //else if (main_options->output_driver) {
-            //	DEBUG_START_TIME(send_gpujpeg_output);
-            //	blenderClientTcp->send_gpujpeg((char*)main_options->output_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
-            //	DEBUG_END_TIME(send_gpujpeg_output);
-            //}
-#else
-            if (main_options->display_driver) {
-                DEBUG_START_TIME(send_gpujpeg_display);
-                blenderClientTcp->send_data_data((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.size());
-                DEBUG_END_TIME(send_gpujpeg_display);
-            }
-#endif
+
             if (blenderClientTcp->is_error()) {
                 throw std::runtime_error("TCP Error!");
             }
