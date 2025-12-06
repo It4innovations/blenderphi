@@ -67,6 +67,9 @@ class SessionParams {
   /* Session-specific temporary directory to store in-progress EXR files in. */
   string temp_dir;
 
+  //BRAAS-HPC
+  bool use_braas_hpc;
+
   SessionParams()
   {
     headless = false;
@@ -88,6 +91,8 @@ class SessionParams {
     use_resolution_divider = true;
 
     shadingsystem = SHADINGSYSTEM_SVM;
+
+    use_braas_hpc = false;
   }
 
   bool modified(const SessionParams &params) const
@@ -98,7 +103,7 @@ class SessionParams {
              background == params.background && pixel_size == params.pixel_size &&
              threads == params.threads && use_profiling == params.use_profiling &&
              shadingsystem == params.shadingsystem && use_auto_tile == params.use_auto_tile &&
-             tile_size == params.tile_size);
+             tile_size == params.tile_size && use_braas_hpc == params.use_braas_hpc);
   }
 };
 

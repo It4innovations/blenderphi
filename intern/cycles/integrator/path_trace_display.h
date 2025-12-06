@@ -150,7 +150,7 @@ class PathTraceDisplay {
 
   //BRAAS-HPC
   bool only_device_buffer();
-  bool buffer_linear2srgb();  
+  bool buffer_uchar_srgba();  
 
  private:
   /* Display driver implemented by the host application. */

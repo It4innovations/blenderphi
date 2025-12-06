@@ -119,7 +119,7 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
   const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
   if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
-      // background = false;
+      //background = false;
   }
 }
 
@@ -225,6 +225,7 @@ void BlenderSession::braas_hpc_session_init(SessionParams& session_params, Scene
     session_params.tile_size = 16;
     session_params.use_resolution_divider = false;
     session_params.samples = 1;
+    session_params.use_braas_hpc = true;
 
     //session_params.threads = 1;
 
@@ -367,8 +368,12 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             break;
         }
 
-        if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
-            pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        //if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+        //    pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        //}
+
+        if (pixels_buf_empty.size() != sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+            pixels_buf_empty.resize(sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
         }
 
         DEBUG_END_TIME(receive);
@@ -484,10 +489,10 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 if (main_options->display_driver->is_gpujpeg()) {
                     DEBUG_START_TIME(send_gpujpeg_display);
                     if (main_options->display_driver->d_pixels) {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 8);
                     }
                     else {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 8);
                     }
                     DEBUG_END_TIME(send_gpujpeg_display);
                 }

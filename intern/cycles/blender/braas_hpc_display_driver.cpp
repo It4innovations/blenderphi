@@ -119,7 +119,7 @@ half4* BRaaSHPCDisplayDriver::map_texture_buffer()
 		pixels.resize(width * height);
 	}
 
-	half4* mapped_rgba_pixels = pixels.data();
+	half4* mapped_rgba_pixels = (half4*)pixels.data();
 
 	return mapped_rgba_pixels;
 }

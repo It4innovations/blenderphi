@@ -1010,7 +1010,7 @@ void PathTraceWorkGPU::copy_to_display_naive(PathTraceDisplay *display,
    * NOTE: allocation happens to the final resolution so that no re-allocation happens on every
    * change of the resolution divider. However, if the display becomes smaller, shrink the
    * allocated memory as well. */
-  if (display->buffer_linear2srgb()) {
+  if (display->buffer_uchar_srgba()) {
       if (display_rgba_byte_.data_width != final_width ||
           display_rgba_byte_.data_height != final_height)
       {

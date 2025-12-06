@@ -164,6 +164,11 @@ void Session::run_main_render_loop()
   while (true) {
     RenderWork render_work = run_update_for_next_iteration();
 
+    // BRAAS-HPC: always update display
+    if (params.use_braas_hpc) {
+      //render_work.display.update = true;
+    }
+
     if (!render_work) {
       if (LOG_IS_ON(LOG_LEVEL_INFO)) {
         double total_time;
