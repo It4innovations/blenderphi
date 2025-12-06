@@ -368,13 +368,13 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             break;
         }
 
-        //if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
-        //    pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
-        //}
-
-        if (pixels_buf_empty.size() != sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
-            pixels_buf_empty.resize(sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+            pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
         }
+
+        //if (pixels_buf_empty.size() != sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+        //    pixels_buf_empty.resize(sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        //}
 
         DEBUG_END_TIME(receive);
 

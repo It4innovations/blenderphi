@@ -53,7 +53,7 @@ class BRaaSHPCDisplayDriver : public DisplayDriver {
 
   virtual bool buffer_uchar_srgba() override 
   { 
-    return true;
+    return false;
   };
 
   void renderBegin();
@@ -65,8 +65,8 @@ class BRaaSHPCDisplayDriver : public DisplayDriver {
   bool is_gpujpeg() { return use_gpujpeg; };
 
 public:
-	//vector<half4> pixels;
-  vector<uchar4> pixels;
+	vector<half4> pixels;
+  //vector<uchar4> pixels;
 	void* d_pixels;
 	int render_finished;
 	//std::atomic<bool> render_finished;
