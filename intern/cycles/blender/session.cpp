@@ -117,9 +117,9 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
 
   //BRAAS-HPC
   const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
-  if (env_p != nullptr) {
+  if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
-      background = false;
+      // background = false;
   }
 }
 
@@ -157,9 +157,9 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
 
   //BRAAS-HPC
   const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
-  if (env_p != nullptr) {
+  if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
-      //background = false;
+      // background = false;
   }
 }
 
