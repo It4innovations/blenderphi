@@ -53,9 +53,9 @@ bool BRaaSHPCDisplayDriver::update_begin(const Params& /*params*/, int texture_w
 	width = texture_width;
 	height = texture_height;
 
-	if (pixels.size() != width * height) {
-		pixels.resize(width * height);
-	}
+	//if (pixels.size() != width * height) {
+	//	pixels.resize(width * height);
+	//}
 
 	return true;
 }
@@ -126,6 +126,7 @@ half4* BRaaSHPCDisplayDriver::map_texture_buffer()
 
 void BRaaSHPCDisplayDriver::unmap_texture_buffer()
 {
+	renderEnd();
 }
 
 /* --------------------------------------------------------------------
