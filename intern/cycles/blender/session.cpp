@@ -276,11 +276,11 @@ void BlenderSession::braas_hpc_render_frame()
     //if (options->output_driver)
     //	options->output_driver->wait();
 
-    if (options->display_driver)
-        options->display_driver->wait();
+    //if (options->display_driver)
+    //    options->display_driver->wait();
 
     //session->start();
-    //session->wait();
+    session->wait();
 }
 
 int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
