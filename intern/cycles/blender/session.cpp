@@ -120,6 +120,8 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
   if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
       //background = false;
+
+      VLOG_INFO << "BraaS-HPC interactive mode enabled.";
   }
 }
 
@@ -160,6 +162,8 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
   if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
       // background = false;
+
+      VLOG_INFO << "BraaS-HPC interactive mode enabled.";
   }
 }
 
@@ -324,8 +328,10 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
         DEBUG_START_TIME(receive);
 
+        VLOG_INFO << "Waiting for render data... (size: " << sizeof(renderengine_data) << ")";
         blenderClientTcp->recv_data_data((char*)&g_renderengine_data_rcv, sizeof(renderengine_data));
         if (blenderClientTcp->is_error()) {
+            VLOG_INFO << "TCP Error detected!";
             break;
         }
 
@@ -351,6 +357,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
         g_renderengine_data_rcv.frame = main_renderengine_data->frame;
 
+        VLOG_INFO << "Received render data for frame " << g_renderengine_data_rcv.frame
+                  << " (size: " << sizeof(renderengine_data) << ")";
         int cyclesphiDataRenderSize = 0;
         blenderClientTcp->recv_data_data((char*)&cyclesphiDataRenderSize, sizeof(int));
 
@@ -358,12 +366,14 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             data_render_aux_rcv.data.resize(cyclesphiDataRenderSize);
         }
 
+        VLOG_INFO << "Receiving render aux data... (size: " << cyclesphiDataRenderSize << ")";
         if (data_render_aux_rcv.data.size() > 0) {
             blenderClientTcp->recv_data_data((char*)data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
             data_render_aux_rcv.data.push_back('\0');
         }
 
         if (blenderClientTcp->is_error()) {
+            VLOG_INFO << "TCP Error detected!";
             //throw std::runtime_error("TCP Error!");
             break;
         }
@@ -489,16 +499,19 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 if (main_options->display_driver->is_gpujpeg()) {
                     DEBUG_START_TIME(send_gpujpeg_display);
                     if (main_options->display_driver->d_pixels) {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 8);
+                        VLOG_INFO << "Sending GPUJPEG display buffer (d_pixels)... (width: " << main_options->width << ", height: " << main_options->height << ")";
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 16);
                     }
                     else {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 8);
+                        VLOG_INFO << "Sending GPUJPEG display buffer (pixels.data())... (width: " << main_options->width << ", height: " << main_options->height << ")";
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 16);
                     }
                     DEBUG_END_TIME(send_gpujpeg_display);
                 }
                 else {
 
                     DEBUG_START_TIME(send_gpujpeg_display);
+                    VLOG_INFO << "Sending display buffer... (width: " << main_options->width << ", height: " << main_options->height << ", size: " << pixels_buf_empty.size() << ")";
                     blenderClientTcp->send_data_data((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.size());
                     DEBUG_END_TIME(send_gpujpeg_display);
                 }
@@ -543,7 +556,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
         }
         catch (const std::exception& ex)
         {
-            std::cerr << ex.what();
+            VLOG_INFO << "Exception caught: " << ex.what();
+            //std::cerr << ex.what();
             //exit(-1);
             break;
         }
