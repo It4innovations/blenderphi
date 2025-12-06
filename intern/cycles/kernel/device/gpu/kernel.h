@@ -762,7 +762,7 @@ ccl_gpu_kernel_postfix
 
  ccl_device_inline float float_linear2srgb(float c)
  {
- #if 1
+ #if 0
    //int index = (int)(c * 1000.0f);
    //if (index < 0) {
    //  index = 0;
