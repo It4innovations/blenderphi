@@ -48,7 +48,7 @@ void BRaaSHPCDisplayDriver::next_tile_begin()
 
 bool BRaaSHPCDisplayDriver::update_begin(const Params& /*params*/, int texture_width, int texture_height)
 {
-	start = std::chrono::steady_clock::now();
+	//start = std::chrono::steady_clock::now();
 
 	width = texture_width;
 	height = texture_height;
@@ -67,6 +67,8 @@ void BRaaSHPCDisplayDriver::update_end()
 
 void BRaaSHPCDisplayDriver::renderBegin()
 {
+	start = std::chrono::steady_clock::now();
+
 	/* Signal session thread to start. */
 	{
 		const thread_scoped_lock session_thread_lock(mutex);
@@ -126,7 +128,7 @@ half4* BRaaSHPCDisplayDriver::map_texture_buffer()
 
 void BRaaSHPCDisplayDriver::unmap_texture_buffer()
 {
-	renderEnd();
+	//renderEnd();
 }
 
 /* --------------------------------------------------------------------

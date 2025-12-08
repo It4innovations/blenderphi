@@ -585,7 +585,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             if (main_options->display_driver)
                 duration = main_options->display_driver->duration;
 
-            cyclesphiDataState.fps = (float)main_options->session_params.samples / render_time_accu; // duration;//fps;
+            cyclesphiDataState.fps = (float)main_options->session_params.samples / duration; // duration;//fps;
             cyclesphiDataState.samples = main_options->session_samples;//total_samples;
             blenderClientTcp->send_data_data((char*)&cyclesphiDataState, sizeof(cyclesphiDataState));
             DEBUG_END_TIME(send_data_state);
@@ -1617,7 +1617,7 @@ void BlenderSession::tag_update()
 
 void BlenderSession::tag_redraw()
 {
-  if (background) {
+  if (background && !braas_hpc_options) {
     /* update stats and progress, only for background here because
      * in 3d view we do it in draw for thread safety reasons */
     update_status_progress();
