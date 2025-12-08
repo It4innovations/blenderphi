@@ -676,11 +676,10 @@ void BlenderSession::create_session()
   }
   else {
       session = make_unique<Session>(session_params, scene_params);
+      session->progress.set_update_callback([this] { tag_redraw(); });
+      session->progress.set_cancel_callback([this] { test_cancel(); });
+      session->set_pause(session_pause);
   }
-  
-  session->progress.set_update_callback([this] { tag_redraw(); });
-  session->progress.set_cancel_callback([this] { test_cancel(); });
-  session->set_pause(session_pause);
 
   /* create scene */
   scene = session->scene.get();
