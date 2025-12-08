@@ -122,6 +122,7 @@ class BlenderSession {
   int braas_hpc_run();
   int braas_hpc_cyclesphi(void* blenderClientTcp);
   void braas_hpc_render_frame();
+  void braas_hpc_render_frame_adaptive(double& acc_render_time, double last_loop_time);
   ccl::BufferParams& braas_hpc_session_buffer_params();
   void braas_hpc_session_init(SessionParams& params, SceneParams& scene_params);
 
