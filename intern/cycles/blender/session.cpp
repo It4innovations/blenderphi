@@ -288,6 +288,39 @@ void BlenderSession::braas_hpc_render_frame()
     session->wait();
 }
 
+void BlenderSession::braas_hpc_render_frame_adaptive(double& acc_render_time, double last_loop_time)
+{
+    BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+
+    // Adaptive time budget: use time of previous iteration (TCP + render)
+    double fps_loop_time = 1.0 / last_loop_time;
+    double fps_budget = std::max(25.0, fps_loop_time * 0.8);  // Use 80% of last loop time, max 1/25ms
+    double render_batch_start = time_dt();
+    int samples_this_batch = 0;
+
+    while (true) {
+        // Render one sample
+        double render_start = time_dt();
+        braas_hpc_render_frame();
+        double render_time = time_dt() - render_start;
+
+        acc_render_time += render_time;
+        samples_this_batch++;
+
+        // Check if we've exceeded the time budget
+        double fps_elapsed = 1.0 / (time_dt() - render_batch_start);
+        if (fps_elapsed <= fps_budget) {
+            break;
+        }
+
+        // Stop if single render takes longer than budget (avoid getting stuck)
+        double fps_render = 1.0 / render_time;
+        if (fps_render < fps_budget || options->session_samples < 3) {
+            break;
+        }
+    }
+}
+
 int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 {
 	TcpConnection* blenderClientTcp = (TcpConnection*)_blenderClientTcp;
@@ -320,11 +353,13 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
     bool bbox_computed = false;
     ///////////////////
     bool render_running = true;
+    double last_loop_time = 1.0 / 25.0;  // Initial estimate: 40ms (25 FPS)
 
     //session_print("Start rendering...\n");
 
     while (render_running) {
         DEBUG_START_TIME(overall);
+        double loop_start = time_dt();
 
         DEBUG_START_TIME(receive);
 
@@ -339,6 +374,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             break;
         }
 
+        // Check for resolution changes
         if (g_renderengine_data_rcv.width == 0 || g_renderengine_data_rcv.height == 0) {
             printf("width or height is 0!!!!\n");
             fflush(0);
@@ -395,7 +431,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 memcpy(main_renderengine_data, &g_renderengine_data_rcv, sizeof(renderengine_data));
 
                 render_time = 0;
-                render_time_accu = 0;
+                render_time_accu = 0.0;
 
                 main_options->session_samples = 0;
 
@@ -404,6 +440,9 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
                     main_options->width = g_renderengine_data_rcv.width;
                     main_options->height = g_renderengine_data_rcv.height;
+
+                    // Reset accumulation on resolution change
+                    render_time_accu = 0.0;
                 }
 
                 float* input = g_renderengine_data_rcv.cam.transform_inverse_view_matrix;
@@ -492,7 +531,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
             /////////////////////////////////////////////////
             DEBUG_START_TIME(render);
-            braas_hpc_render_frame();
+            // Render multiple samples based on previous loop time
+            braas_hpc_render_frame_adaptive(render_time_accu, last_loop_time);
             DEBUG_END_TIME(render);
             /////////////////////////////////////////////////
             if (main_options->display_driver) {
@@ -558,9 +598,11 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
         {
             VLOG_INFO << "Exception caught: " << ex.what();
             //std::cerr << ex.what();
-            //exit(-1);
             break;
         }
+
+        // Update last loop time for next iteration's time budget
+        last_loop_time = time_dt() - loop_start;
 
         DEBUG_END_TIME(overall);
     }
