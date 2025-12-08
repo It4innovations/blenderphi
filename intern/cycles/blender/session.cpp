@@ -288,7 +288,7 @@ void BlenderSession::braas_hpc_render_frame()
     session->wait();
 }
 
-void BlenderSession::braas_hpc_render_frame_adaptive(double& acc_render_time, double last_loop_time)
+void BlenderSession::braas_hpc_render_frame_adaptive(double& render_time, double last_loop_time)
 {
     BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
 
@@ -302,9 +302,9 @@ void BlenderSession::braas_hpc_render_frame_adaptive(double& acc_render_time, do
         // Render one sample
         double render_start = time_dt();
         braas_hpc_render_frame();
-        double render_time = time_dt() - render_start;
+        render_time = time_dt() - render_start;
 
-        acc_render_time += render_time;
+        //acc_render_time += render_time;
         samples_this_batch++;
 
         // Check if we've exceeded the time budget
@@ -326,7 +326,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 	TcpConnection* blenderClientTcp = (TcpConnection*)_blenderClientTcp;
     ////////////////////////////////////////////////////
     double render_time = 0;
-    double render_time_accu = 0;
+    //double render_time_accu = 0;
     int spp_one_step = 0;
 
     std::vector<char> pixels_buf_empty;
@@ -430,8 +430,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 DEBUG_START_TIME(camera);
                 memcpy(main_renderengine_data, &g_renderengine_data_rcv, sizeof(renderengine_data));
 
-                render_time = 0;
-                render_time_accu = 0.0;
+                //render_time = 0;
+                //render_time_accu = 0.0;
 
                 main_options->session_samples = 0;
 
@@ -442,7 +442,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                     main_options->height = g_renderengine_data_rcv.height;
 
                     // Reset accumulation on resolution change
-                    render_time_accu = 0.0;
+                    //render_time_accu = 0.0;
                 }
 
                 float* input = g_renderengine_data_rcv.cam.transform_inverse_view_matrix;
@@ -522,8 +522,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 memcpy(main_data_render_aux->data.data(), data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
 
                 main_options->session_samples = 0;
-                render_time = 0;
-                render_time_accu = 0;
+                //render_time = 0;
+                //render_time_accu = 0;
 
                 xml_set_material_to_shader(scene, main_data_render_aux->data.data());
                 DEBUG_END_TIME(material);
@@ -532,7 +532,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             /////////////////////////////////////////////////
             DEBUG_START_TIME(render);
             // Render multiple samples based on previous loop time
-            braas_hpc_render_frame_adaptive(render_time_accu, last_loop_time);
+            braas_hpc_render_frame_adaptive(render_time, last_loop_time);
             DEBUG_END_TIME(render);
             /////////////////////////////////////////////////
             if (main_options->display_driver) {
@@ -579,13 +579,13 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             }
 
             DEBUG_START_TIME(send_data_state);
-            float duration = 0;
-            //if (main_options->output_driver)
-            //	duration = main_options->output_driver->duration;
-            if (main_options->display_driver)
-                duration = main_options->display_driver->duration;
+            //float duration = 0;
+            ////if (main_options->output_driver)
+            ////	duration = main_options->output_driver->duration;
+            //if (main_options->display_driver)
+            //    duration = main_options->display_driver->duration;
 
-            cyclesphiDataState.fps = (float)main_options->session_params.samples / duration; // duration;//fps;
+            cyclesphiDataState.fps = (float)main_options->session_params.samples / render_time; // duration;//fps;
             cyclesphiDataState.samples = main_options->session_samples;//total_samples;
             blenderClientTcp->send_data_data((char*)&cyclesphiDataState, sizeof(cyclesphiDataState));
             DEBUG_END_TIME(send_data_state);
