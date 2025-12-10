@@ -1,7 +1,7 @@
 # BRaaS-HPC / BlenderPhi — Release Notes
 ## Releases
 **BlenderPhi v4.5.5**
-- Karolina cluster: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4.5.5/blenderphi-v4.5.5-karolina-linux-x64-gcc13.tar.xz
+- Karolina cluster: https://code.it4i.cz/raas/blenderphi/-/raw/main/releases/blenderphi-v4.5.5/blenderphi-v4.5.5-karolina-linux-x64-gcc13.tar.xz
 
 ## Highlights (BlenderPhi v4.5.5)
 
