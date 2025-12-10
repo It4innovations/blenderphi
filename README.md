@@ -1,7 +1,9 @@
-# BRaaS-HPC / BlenderPhi v4.5.5 — Release Notes
-Release: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4.5.5/blenderphi-v4.5.5-karolina-linux-x64-gcc13.tar.xz
+# BRaaS-HPC / BlenderPhi — Release Notes
+## Releases
+**BlenderPhi v4.5.5**
+- Karolina cluster: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4.5.5/blenderphi-v4.5.5-karolina-linux-x64-gcc13.tar.xz
 
-## Highlights
+## Highlights (BlenderPhi v4.5.5)
 
 - New BRaaS-HPC display driver for interactive remote rendering.
 - Optional GPUJPEG compression path for remote display.
@@ -10,7 +12,7 @@ Release: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4
 - Unified byte-RGBA display pipeline on CPU, CUDA, HIP, and oneAPI.
 - New build options for GPU/CPU image handling on all GPU backends.
 
-## New Features
+## New Features (BlenderPhi v4.5.5)
 
 ### BRaaS-HPC display driver integration
 - Added a new `BRaaSHPCDisplayDriver` implementation in the Cycles Blender integration.
@@ -52,7 +54,7 @@ Release: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4
   - Automatic volume mesh generation (`create_volume_mesh`) is now conditional on `!volume->get_volume_mesh()`.
 - This allows explicit control over whether a volume should be meshed or not — important when backends/pipelines handle volumes differently (e.g., NanoVDB vs mesh).
 
-## Improvements and Changes
+## Improvements and Changes (BlenderPhi v4.5.5)
 
 ### NanoVDB and VDB loaders
 - Extended `VDBImageLoader`:
