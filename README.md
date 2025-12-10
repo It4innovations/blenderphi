@@ -1,4 +1,5 @@
 # BRaaS-HPC / BlenderPhi v4.5.5 — Release Notes
+Release: https://code.it4i.cz/raas/blenderphi/-/blob/main/releases/blenderphi-v4.5.5/blenderphi-v4.5.5-karolina-linux-x64-gcc13.tar.xz
 
 ## Highlights
 
