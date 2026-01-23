@@ -376,13 +376,14 @@ bool VDBImageLoader::equals(const ImageLoader &other) const
 
 void VDBImageLoader::cleanup()
 {
-#ifdef WITH_OPENVDB
-  /* Free OpenVDB grid memory as soon as we can. */
-  grid.reset();
-#endif
-#ifdef WITH_NANOVDB
-  nanogrid.reset();
-#endif
+//TODO
+//#ifdef WITH_OPENVDB
+//  /* Free OpenVDB grid memory as soon as we can. */
+//  grid.reset();
+//#endif
+//#ifdef WITH_NANOVDB
+//  nanogrid.reset();
+//#endif
 }
 
 bool VDBImageLoader::is_vdb_loader() const
@@ -637,7 +638,8 @@ bool RAWImageLoader::equals(const ImageLoader& other) const
 
 void RAWImageLoader::cleanup()
 {
-    grid.clear();
+    //TODO
+    //grid.clear();
 }
 
 bool RAWImageLoader::is_vdb_loader() const
