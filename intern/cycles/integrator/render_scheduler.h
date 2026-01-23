@@ -464,6 +464,9 @@ class RenderScheduler {
    * types of hi-dpi displays. */
   int pixel_size_ = 1;
 
+  //BRAAS-HPC
+  bool use_braas_hpc_;
+
   TileManager &tile_manager_;
 
   BufferParams buffer_params_;

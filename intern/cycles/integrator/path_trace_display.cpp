@@ -273,9 +273,9 @@ bool PathTraceDisplay::only_device_buffer()
     return driver_->only_device_buffer();
 }
 
-bool PathTraceDisplay::buffer_linear2srgb()
+bool PathTraceDisplay::buffer_uchar_srgba()
 {
-    return driver_->buffer_linear2srgb();
+    return driver_->buffer_uchar_srgba();
 }
 
 CCL_NAMESPACE_END

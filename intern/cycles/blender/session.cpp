@@ -117,9 +117,11 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
 
   //BRAAS-HPC
   const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
-  if (env_p != nullptr) {
+  if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
-      background = false;
+      //background = false;
+
+      VLOG_INFO << "BraaS-HPC interactive mode enabled.";
   }
 }
 
@@ -157,9 +159,11 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
 
   //BRAAS-HPC
   const char* env_p = std::getenv("CYCLES_BRAAS_HPC_INTERACTIVE_MODE");
-  if (env_p != nullptr) {
+  if (env_p != nullptr && atoi(env_p) != 0) {
       braas_hpc_options = new BraaSHPCOptions();
-      //background = false;
+      // background = false;
+
+      VLOG_INFO << "BraaS-HPC interactive mode enabled.";
   }
 }
 
@@ -225,6 +229,7 @@ void BlenderSession::braas_hpc_session_init(SessionParams& session_params, Scene
     session_params.tile_size = 16;
     session_params.use_resolution_divider = false;
     session_params.samples = 1;
+    session_params.use_braas_hpc = true;
 
     //session_params.threads = 1;
 
@@ -276,11 +281,44 @@ void BlenderSession::braas_hpc_render_frame()
     //if (options->output_driver)
     //	options->output_driver->wait();
 
-    if (options->display_driver)
-        options->display_driver->wait();
+    //if (options->display_driver)
+    //    options->display_driver->wait();
 
     //session->start();
-    //session->wait();
+    session->wait();
+}
+
+void BlenderSession::braas_hpc_render_frame_adaptive(double& render_time, double last_loop_time)
+{
+    BraaSHPCOptions* options = (BraaSHPCOptions*)braas_hpc_options;
+
+    // Adaptive time budget: use time of previous iteration (TCP + render)
+    double fps_loop_time = 1.0 / last_loop_time;
+    double fps_budget = std::max(25.0, fps_loop_time * 0.8);  // Use 80% of last loop time, max 1/25ms
+    double render_batch_start = time_dt();
+    int samples_this_batch = 0;
+
+    while (true) {
+        // Render one sample
+        double render_start = time_dt();
+        braas_hpc_render_frame();
+        render_time = time_dt() - render_start;
+
+        //acc_render_time += render_time;
+        samples_this_batch++;
+
+        // Check if we've exceeded the time budget
+        double fps_elapsed = 1.0 / (time_dt() - render_batch_start);
+        if (fps_elapsed <= fps_budget) {
+            break;
+        }
+
+        // Stop if single render takes longer than budget (avoid getting stuck)
+        double fps_render = 1.0 / render_time;
+        if (fps_render < fps_budget || options->session_samples < 3) {
+            break;
+        }
+    }
 }
 
 int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
@@ -288,7 +326,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 	TcpConnection* blenderClientTcp = (TcpConnection*)_blenderClientTcp;
     ////////////////////////////////////////////////////
     double render_time = 0;
-    double render_time_accu = 0;
+    //double render_time_accu = 0;
     int spp_one_step = 0;
 
     std::vector<char> pixels_buf_empty;
@@ -315,16 +353,20 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
     bool bbox_computed = false;
     ///////////////////
     bool render_running = true;
+    double last_loop_time = 1.0 / 25.0;  // Initial estimate: 40ms (25 FPS)
 
     //session_print("Start rendering...\n");
 
     while (render_running) {
         DEBUG_START_TIME(overall);
+        double loop_start = time_dt();
 
         DEBUG_START_TIME(receive);
 
+        VLOG_INFO << "Waiting for render data... (size: " << sizeof(renderengine_data) << ")";
         blenderClientTcp->recv_data_data((char*)&g_renderengine_data_rcv, sizeof(renderengine_data));
         if (blenderClientTcp->is_error()) {
+            VLOG_INFO << "TCP Error detected!";
             break;
         }
 
@@ -332,6 +374,7 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             break;
         }
 
+        // Check for resolution changes
         if (g_renderengine_data_rcv.width == 0 || g_renderengine_data_rcv.height == 0) {
             printf("width or height is 0!!!!\n");
             fflush(0);
@@ -350,6 +393,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
         g_renderengine_data_rcv.frame = main_renderengine_data->frame;
 
+        VLOG_INFO << "Received render data for frame " << g_renderengine_data_rcv.frame
+                  << " (size: " << sizeof(renderengine_data) << ")";
         int cyclesphiDataRenderSize = 0;
         blenderClientTcp->recv_data_data((char*)&cyclesphiDataRenderSize, sizeof(int));
 
@@ -357,12 +402,14 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             data_render_aux_rcv.data.resize(cyclesphiDataRenderSize);
         }
 
+        VLOG_INFO << "Receiving render aux data... (size: " << cyclesphiDataRenderSize << ")";
         if (data_render_aux_rcv.data.size() > 0) {
             blenderClientTcp->recv_data_data((char*)data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
             data_render_aux_rcv.data.push_back('\0');
         }
 
         if (blenderClientTcp->is_error()) {
+            VLOG_INFO << "TCP Error detected!";
             //throw std::runtime_error("TCP Error!");
             break;
         }
@@ -370,6 +417,10 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
         if (pixels_buf_empty.size() != sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
             pixels_buf_empty.resize(sizeof(half4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
         }
+
+        //if (pixels_buf_empty.size() != sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height) {
+        //    pixels_buf_empty.resize(sizeof(uchar4) * g_renderengine_data_rcv.width * g_renderengine_data_rcv.height);
+        //}
 
         DEBUG_END_TIME(receive);
 
@@ -379,8 +430,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 DEBUG_START_TIME(camera);
                 memcpy(main_renderengine_data, &g_renderengine_data_rcv, sizeof(renderengine_data));
 
-                render_time = 0;
-                render_time_accu = 0;
+                //render_time = 0;
+                //render_time_accu = 0.0;
 
                 main_options->session_samples = 0;
 
@@ -389,6 +440,9 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
                     main_options->width = g_renderengine_data_rcv.width;
                     main_options->height = g_renderengine_data_rcv.height;
+
+                    // Reset accumulation on resolution change
+                    //render_time_accu = 0.0;
                 }
 
                 float* input = g_renderengine_data_rcv.cam.transform_inverse_view_matrix;
@@ -468,8 +522,8 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
                 memcpy(main_data_render_aux->data.data(), data_render_aux_rcv.data.data(), data_render_aux_rcv.data.size());
 
                 main_options->session_samples = 0;
-                render_time = 0;
-                render_time_accu = 0;
+                //render_time = 0;
+                //render_time_accu = 0;
 
                 xml_set_material_to_shader(scene, main_data_render_aux->data.data());
                 DEBUG_END_TIME(material);
@@ -477,23 +531,27 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
 
             /////////////////////////////////////////////////
             DEBUG_START_TIME(render);
-            braas_hpc_render_frame();
+            // Render multiple samples based on previous loop time
+            braas_hpc_render_frame_adaptive(render_time, last_loop_time);
             DEBUG_END_TIME(render);
             /////////////////////////////////////////////////
             if (main_options->display_driver) {
                 if (main_options->display_driver->is_gpujpeg()) {
                     DEBUG_START_TIME(send_gpujpeg_display);
                     if (main_options->display_driver->d_pixels) {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                        VLOG_INFO << "Sending GPUJPEG display buffer (d_pixels)... (width: " << main_options->width << ", height: " << main_options->height << ")";
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->d_pixels, pixels_buf_empty.data(), main_options->width, main_options->height, 16);
                     }
                     else {
-                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 1);
+                        VLOG_INFO << "Sending GPUJPEG display buffer (pixels.data())... (width: " << main_options->width << ", height: " << main_options->height << ")";
+                        blenderClientTcp->send_gpujpeg((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.data(), main_options->width, main_options->height, 16);
                     }
                     DEBUG_END_TIME(send_gpujpeg_display);
                 }
                 else {
 
                     DEBUG_START_TIME(send_gpujpeg_display);
+                    VLOG_INFO << "Sending display buffer... (width: " << main_options->width << ", height: " << main_options->height << ", size: " << pixels_buf_empty.size() << ")";
                     blenderClientTcp->send_data_data((char*)main_options->display_driver->pixels.data(), pixels_buf_empty.size());
                     DEBUG_END_TIME(send_gpujpeg_display);
                 }
@@ -521,13 +579,13 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
             }
 
             DEBUG_START_TIME(send_data_state);
-            float duration = 0;
-            //if (main_options->output_driver)
-            //	duration = main_options->output_driver->duration;
-            if (main_options->display_driver)
-                duration = main_options->display_driver->duration;
+            //float duration = 0;
+            ////if (main_options->output_driver)
+            ////	duration = main_options->output_driver->duration;
+            //if (main_options->display_driver)
+            //    duration = main_options->display_driver->duration;
 
-            cyclesphiDataState.fps = (float)main_options->session_params.samples / duration;//fps;
+            cyclesphiDataState.fps = (float)main_options->session_params.samples / render_time; // duration;//fps;
             cyclesphiDataState.samples = main_options->session_samples;//total_samples;
             blenderClientTcp->send_data_data((char*)&cyclesphiDataState, sizeof(cyclesphiDataState));
             DEBUG_END_TIME(send_data_state);
@@ -538,10 +596,13 @@ int BlenderSession::braas_hpc_cyclesphi(void* _blenderClientTcp)
         }
         catch (const std::exception& ex)
         {
-            std::cerr << ex.what();
-            //exit(-1);
+            VLOG_INFO << "Exception caught: " << ex.what();
+            //std::cerr << ex.what();
             break;
         }
+
+        // Update last loop time for next iteration's time budget
+        last_loop_time = time_dt() - loop_start;
 
         DEBUG_END_TIME(overall);
     }
@@ -615,11 +676,10 @@ void BlenderSession::create_session()
   }
   else {
       session = make_unique<Session>(session_params, scene_params);
+      session->progress.set_update_callback([this] { tag_redraw(); });
+      session->progress.set_cancel_callback([this] { test_cancel(); });
+      session->set_pause(session_pause);
   }
-  
-  session->progress.set_update_callback([this] { tag_redraw(); });
-  session->progress.set_cancel_callback([this] { test_cancel(); });
-  session->set_pause(session_pause);
 
   /* create scene */
   scene = session->scene.get();
@@ -1578,7 +1638,7 @@ void BlenderSession::tag_update()
 
 void BlenderSession::tag_redraw()
 {
-  if (background) {
+  if (background && !braas_hpc_options) {
     /* update stats and progress, only for background here because
      * in 3d view we do it in draw for thread safety reasons */
     update_status_progress();

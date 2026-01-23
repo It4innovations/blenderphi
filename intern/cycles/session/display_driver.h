@@ -150,7 +150,7 @@ class DisplayDriver {
 
   //BRAAS - HPC
   virtual bool only_device_buffer() { return false; };
-  virtual bool buffer_linear2srgb() { return false; };
+  virtual bool buffer_uchar_srgba() { return false; };
 
   virtual half4 *map_texture_buffer() = 0;
   virtual void unmap_texture_buffer() = 0;
