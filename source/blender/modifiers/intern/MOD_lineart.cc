@@ -94,7 +94,11 @@ static void copy_data(const ModifierData *md, ModifierData *target, const int fl
   GreasePencilLineartModifierData *target_lmd =
       reinterpret_cast<GreasePencilLineartModifierData *>(target);
 
-  target_lmd->runtime = MEM_new<LineartModifierRuntime>(__func__, *source_runtime);
+  if (source_runtime) {
+    /* `source_runtime` can be nullptr when line art is imported from asset. `target_lmd->runtime`
+     * Will also re-init before calculation/depsgraph evaluation if it's nullptr anyway.  */
+    target_lmd->runtime = MEM_new<LineartModifierRuntime>(__func__, *source_runtime);
+  }
 }
 
 static void free_data(ModifierData *md)
@@ -699,7 +703,7 @@ static void composition_panel_draw(const bContext * /*C*/, Panel *panel)
   uiLayout *col = &layout->column(false);
   uiLayoutSetActive(col, !show_in_front);
 
-  col->prop(ptr, "stroke_depth_offset", UI_ITEM_R_SLIDER, IFACE_("Depth Offset"), ICON_NONE);
+  col->prop(ptr, "stroke_depth_offset", UI_ITEM_NONE, IFACE_("Depth Offset"), ICON_NONE);
   col->prop(ptr,
             "use_offset_towards_custom_camera",
             UI_ITEM_NONE,

@@ -216,9 +216,12 @@ static int pose_slide_init(bContext *C, wmOperator *op, ePoseSlide_Modes mode)
   /* For each Pose-Channel which gets affected, get the F-Curves for that channel
    * and set the relevant transform flags. */
   poseAnim_mapping_get(C, &pso->pfLinks);
-
-  const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
-      CTX_data_scene(C), CTX_data_view_layer(C), CTX_wm_view3d(C), OB_MODE_POSE);
+  ObjectsInModeParams params = {0};
+  params.object_mode = OB_MODE_POSE;
+  /* Explicitly setting this to false because we *do* want this to work for armature instances. */
+  params.no_dup_data = false;
+  const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_mode_params(
+      CTX_data_scene(C), CTX_data_view_layer(C), CTX_wm_view3d(C), &params);
   pso->ob_data_array.reinitialize(objects.size());
 
   for (const int ob_index : objects.index_range()) {
@@ -963,8 +966,6 @@ static void pose_slide_draw_status(bContext *C, tPoseSlideOp *pso)
     status.item_bool(
         IFACE_("Bone Visibility"), !(v3d->overlay.flag & V3D_OVERLAY_HIDE_BONES), ICON_EVENT_H);
   }
-
-  ED_area_status_text(pso->area, "");
 }
 
 /**
@@ -1130,7 +1131,6 @@ static wmOperatorStatus pose_slide_modal(bContext *C, wmOperator *op, const wmEv
       if (event->val == KM_PRESS) {
         /* Return to normal cursor and header status. */
         ED_workspace_status_text(C, nullptr);
-        ED_area_status_text(pso->area, nullptr);
         WM_cursor_modal_restore(win);
 
         /* Depsgraph updates + redraws. Redraw needed to remove UI. */
@@ -1151,7 +1151,6 @@ static wmOperatorStatus pose_slide_modal(bContext *C, wmOperator *op, const wmEv
       if (event->val == KM_PRESS) {
         /* Return to normal cursor and header status. */
         ED_workspace_status_text(C, nullptr);
-        ED_area_status_text(pso->area, nullptr);
         WM_cursor_modal_restore(win);
 
         /* Reset transforms back to original state. */
