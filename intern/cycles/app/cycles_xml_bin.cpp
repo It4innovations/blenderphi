@@ -43,12 +43,19 @@
 #include <nanovdb/io/IO.h>
 
 #include "scene/image_oiio.h"
+#include "graph/node_xml_util.h"
 
 #define READ_ATTR_I(name,type) \
     const xml_attribute attr_##name = node_attribute.attribute(#name); \
     type name = (type) 0; \
     if (attr_##name) \
         name = (type) atoi(attr_##name.value());
+
+#define READ_ATTR_ENUM(name,type) \
+    const xml_attribute attr_##name = node_attribute.attribute(#name); \
+    type name = (type) 0; \
+    if (attr_##name) \
+        str_to_enum(attr_##name.value(), name);
 
 #define READ_ATTR_ULL(name,type) \
     const xml_attribute attr_##name = node_attribute.attribute(#name); \
@@ -61,6 +68,12 @@
     type name; \
     if (attr_##name) \
         name = (type) (attr_##name.value());
+
+#define READ_ATTR_TYPE_DESC(name,type) \
+    const xml_attribute attr_##name = node_attribute.attribute(#name); \
+    type name; \
+    if (attr_##name) \
+        name = (type) str_to_typedesc(attr_##name.value());
 
 CCL_NAMESPACE_BEGIN
 
@@ -410,8 +423,9 @@ static void xml_read_shader_graph(XMLReadState& state, Shader* shader, const xml
 					//READ_ATTR_ULL(byte_size, size_t);
 					//attr.byte_size = byte_size;
 					//ImageDataType type;
-					READ_ATTR_I(type, int);
-					attr.type = (ImageDataType)type;
+					
+					READ_ATTR_ENUM(image_type, ImageDataType);
+					attr.type = image_type;
 
 					///* Optional color space, defaults to raw. */
 					//ustring colorspace;
@@ -467,8 +481,8 @@ static void xml_read_shader_graph(XMLReadState& state, Shader* shader, const xml
 					//READ_ATTR_ULL(byte_size, size_t);
 					//attr.byte_size = byte_size;
 					//ImageDataType type;
-					READ_ATTR_I(type, int);
-					attr.type = (ImageDataType)type;
+					READ_ATTR_ENUM(type, ImageDataType);
+					//attr.type = (ImageDataType)type;
 
 					///* Optional color space, defaults to raw. */
 					//ustring colorspace;
@@ -583,23 +597,24 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 		if (attr_name)
 			name = attr_name.value();
 
-		READ_ATTR_I(std, AttributeStandard);
+		READ_ATTR_ENUM(std, AttributeStandard);
 
-		TypeDesc type;
+		//TypeDesc type_desc;
+		READ_ATTR_TYPE_DESC(type, TypeDesc);
 
-		READ_ATTR_I(basetype, unsigned char);      ///< C data type at the heart of our type
-		READ_ATTR_I(aggregate, unsigned char);     ///< What kind of AGGREGATE is it?
-		READ_ATTR_I(vecsemantics, unsigned char);  ///< Hint: What does the aggregate represent?
-		READ_ATTR_I(reserved, unsigned char);      ///< Reserved for future expansion
-		READ_ATTR_I(arraylen, int);      ///< Array length, 0 = not array, -1 = unsized
+		//READ_ATTR_I(basetype, unsigned char);      ///< C data type at the heart of our type
+		//READ_ATTR_I(aggregate, unsigned char);     ///< What kind of AGGREGATE is it?
+		//READ_ATTR_I(vecsemantics, unsigned char);  ///< Hint: What does the aggregate represent?
+		//READ_ATTR_I(reserved, unsigned char);      ///< Reserved for future expansion
+		//READ_ATTR_I(arraylen, int);      ///< Array length, 0 = not array, -1 = unsized
 
-		type.basetype = basetype;
-		type.aggregate = aggregate;
-		type.vecsemantics = vecsemantics;
-		type.reserved = reserved;
-		type.arraylen = arraylen;
+		//type.basetype = basetype;
+		//type.aggregate = aggregate;
+		//type.vecsemantics = vecsemantics;
+		//type.reserved = reserved;
+		//type.arraylen = arraylen;
 
-		READ_ATTR_I(element, AttributeElement);
+		READ_ATTR_ENUM(element, AttributeElement);
 		READ_ATTR_I(flags, uint);
 
 		Attribute* attr = geom->attributes.add(name, type, element);
@@ -844,19 +859,20 @@ static void xml_read_object(XMLReadState& state, const xml_node xml_node_obj)
 		if (attr_name)
 			name = attr_name.value();
 
-		TypeDesc type;
+		//TypeDesc type_desc;
+		READ_ATTR_TYPE_DESC(type, TypeDesc);
 
-		READ_ATTR_I(basetype, unsigned char);      ///< C data type at the heart of our type
-		READ_ATTR_I(aggregate, unsigned char);     ///< What kind of AGGREGATE is it?
-		READ_ATTR_I(vecsemantics, unsigned char);  ///< Hint: What does the aggregate represent?
-		READ_ATTR_I(reserved, unsigned char);      ///< Reserved for future expansion
-		READ_ATTR_I(arraylen, int);      ///< Array length, 0 = not array, -1 = unsized
+		//READ_ATTR_I(basetype, unsigned char);      ///< C data type at the heart of our type
+		//READ_ATTR_I(aggregate, unsigned char);     ///< What kind of AGGREGATE is it?
+		//READ_ATTR_I(vecsemantics, unsigned char);  ///< Hint: What does the aggregate represent?
+		//READ_ATTR_I(reserved, unsigned char);      ///< Reserved for future expansion
+		//READ_ATTR_I(arraylen, int);      ///< Array length, 0 = not array, -1 = unsized
 
-		type.basetype = basetype;
-		type.aggregate = aggregate;
-		type.vecsemantics = vecsemantics;
-		type.reserved = reserved;
-		type.arraylen = arraylen;
+		//type.basetype = basetype;
+		//type.aggregate = aggregate;
+		//type.vecsemantics = vecsemantics;
+		//type.reserved = reserved;
+		//type.arraylen = arraylen;
 
 		const xml_attribute attr_data = node_attribute.attribute("data");
 		vector<char> data;
@@ -864,7 +880,7 @@ static void xml_read_object(XMLReadState& state, const xml_node xml_node_obj)
 			read_vector_from_binary_file(state, data, attr_data.value());
 		}
 
-		READ_ATTR_I(interp, ParamValue::Interp);
+		READ_ATTR_ENUM(interp, ParamValue::Interp);
 		ParamValue param_value(name, type, data.size() / type.size(), interp, (void*)data.data());
 		object->attributes.push_back(param_value);
 	}

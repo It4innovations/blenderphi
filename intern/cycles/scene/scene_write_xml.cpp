@@ -44,9 +44,15 @@
 
 #include <openvdb/io/Stream.h>
 
+#include "graph/node_xml_util.h"
+
 #define ADD_ATTR(name) \
 			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
 			attr_##name = attr.name;
+
+#define ADD_ATTR_ENUM(name) \
+			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
+			attr_##name = enum_to_str(attr.name);
 
 #define ADD_ATTR_STR(name) \
 			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
@@ -55,6 +61,14 @@
 #define ADD_ATTR_DTYPE(type, name) \
 			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
 			attr_##name = type.name;
+
+#define ADD_ATTR_DTYPE_DESC(type, name) \
+			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
+			attr_##name = typedesc_to_cstr(type);
+
+#define ADD_ATTR_TYPE_DESC(name) \
+			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
+			attr_##name = typedesc_to_cstr(attr.name);
 
 CCL_NAMESPACE_BEGIN
 
@@ -496,7 +510,7 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 				//ADD_ATTR(byte_size);
 				//ImageDataType type;
 				//int itype = attr.type;
-				ADD_ATTR(type);
+				ADD_ATTR_ENUM(type);
 
 				///* Optional color space, defaults to raw. */
 				//ustring colorspace;
@@ -798,18 +812,18 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 				attr_name = attr.name.string().c_str();//(xml_pointer_to_name(&attr) + "_" + attr.name.string()).c_str();
 
 				//AttributeStandard std;
-				ADD_ATTR(std);				
+				ADD_ATTR_ENUM(std);				
 
 				//TypeDesc type;
-				//ADD_ATTR(type);
-				ADD_ATTR_DTYPE(attr.type, basetype);      ///< C data type at the heart of our type
-				ADD_ATTR_DTYPE(attr.type, aggregate);     ///< What kind of AGGREGATE is it?
-				ADD_ATTR_DTYPE(attr.type, vecsemantics);  ///< Hint: What does the aggregate represent?
-				ADD_ATTR_DTYPE(attr.type, reserved);      ///< Reserved for future expansion
-				ADD_ATTR_DTYPE(attr.type, arraylen);      ///< Array length, 0 = not array, -1 = unsized
+				ADD_ATTR_TYPE_DESC(type);
+				//ADD_ATTR_DTYPE(attr.type, basetype);      ///< C data type at the heart of our type
+				//ADD_ATTR_DTYPE(attr.type, aggregate);     ///< What kind of AGGREGATE is it?
+				//ADD_ATTR_DTYPE(attr.type, vecsemantics);  ///< Hint: What does the aggregate represent?
+				//ADD_ATTR_DTYPE(attr.type, reserved);      ///< Reserved for future expansion
+				//ADD_ATTR_DTYPE(attr.type, arraylen);      ///< Array length, 0 = not array, -1 = unsized
 
 				//AttributeElement element;
-				ADD_ATTR(element);
+				ADD_ATTR_ENUM(element);
 
 				//uint flags;
 				ADD_ATTR(flags);
@@ -1239,11 +1253,12 @@ void scene_write_xml_object(XMLWriteState& state, xml_node node)
 				//attr_type = (int)param_value.type();// .c_str();
 
 				//ADD_ATTR(type);
-				ADD_ATTR_DTYPE(param_value.type(), basetype);      ///< C data type at the heart of our type
-				ADD_ATTR_DTYPE(param_value.type(), aggregate);     ///< What kind of AGGREGATE is it?
-				ADD_ATTR_DTYPE(param_value.type(), vecsemantics);  ///< Hint: What does the aggregate represent?
-				ADD_ATTR_DTYPE(param_value.type(), reserved);      ///< Reserved for future expansion
-				ADD_ATTR_DTYPE(param_value.type(), arraylen);      ///< Array length, 0 = not array, -1 = unsized
+				ADD_ATTR_DTYPE_DESC(param_value.type(), type);
+				//ADD_ATTR_DTYPE(param_value.type(), basetype);      ///< C data type at the heart of our type
+				//ADD_ATTR_DTYPE(param_value.type(), aggregate);     ///< What kind of AGGREGATE is it?
+				//ADD_ATTR_DTYPE(param_value.type(), vecsemantics);  ///< Hint: What does the aggregate represent?
+				//ADD_ATTR_DTYPE(param_value.type(), reserved);      ///< Reserved for future expansion
+				//ADD_ATTR_DTYPE(param_value.type(), arraylen);      ///< Array length, 0 = not array, -1 = unsized
 
 				//union {
 				//	char localval[16];
@@ -1260,7 +1275,7 @@ void scene_write_xml_object(XMLWriteState& state, xml_node node)
 				//int m_nvalues = 0;  ///< number of values of the given type
 				//unsigned char m_interp = INTERP_CONSTANT;  ///< Interpolation type
 				xml_attribute attr_interp = node_attribute.append_attribute("interp");
-				attr_interp = param_value.interp();
+				attr_interp = enum_to_str(param_value.interp());
 				//bool m_copy = false;
 				//bool m_nonlocal = false;
 				//xml_attribute attr_nonlocal = node_attribute.append_attribute("nonlocal");
@@ -1298,6 +1313,7 @@ void scene_write_xml_scene(XMLWriteState& state, xml_node scene_node)
 	//Integrator* integrator;
 	xml_write_node(state, state.scene->integrator, scene_node).attribute("name") = "integrator";
 
+#if 0
 	///* data lists */
 	//unique_ptr_vector<Background> backgrounds;
 	for (Background* b : state.scene->backgrounds) {
@@ -1324,13 +1340,16 @@ void scene_write_xml_scene(XMLWriteState& state, xml_node scene_node)
 	for (ParticleSystem* ps : state.scene->particle_systems) {
 		xml_write_node(state, ps, scene_node);
 	}
+#endif
 	//unique_ptr_vector<Geometry> geometry;
 	scene_write_xml_geom(state, scene_node);
 
+#if 0
 	//unique_ptr_vector<Procedural> procedurals;
 	for (Procedural* p : state.scene->procedurals) {
 		xml_write_node(state, p, scene_node);
 	}
+#endif
 
 	//unique_ptr_vector<Object> objects;
 	scene_write_xml_object(state, scene_node);
