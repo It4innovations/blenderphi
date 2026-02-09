@@ -727,7 +727,7 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIP)
 
     if(WITH_NANOVDB)
       set(hip_flags ${hip_flags}
-        -D WITH_NANOVDB)
+        -D WITH_NANOVDB -I ${NANOVDB_INCLUDE_DIR})
     endif()
 
     if(WITH_GPU_CPUIMAGE)
@@ -777,7 +777,7 @@ if(WITH_CYCLES_HIP_BINARIES AND WITH_CYCLES_DEVICE_HIPRT)
   endif()
 
   if(WITH_NANOVDB)
-    set(hiprt_compile_flags ${hiprt_compile_flags} -D WITH_NANOVDB)
+    set(hiprt_compile_flags ${hiprt_compile_flags} -D WITH_NANOVDB -I ${NANOVDB_INCLUDE_DIR})
   endif()
 
   if(WITH_GPU_CPUIMAGE)
@@ -1068,7 +1068,12 @@ if(WITH_CYCLES_DEVICE_ONEAPI)
 
   if(WITH_NANOVDB)
     list(APPEND sycl_compiler_flags
-      -DWITH_NANOVDB)
+      -DWITH_NANOVDB -I ${NANOVDB_INCLUDE_DIR})
+  endif()
+
+  if(WITH_CYCLES_DEBUG)
+    list(APPEND sycl_compiler_flags 
+      -DWITH_CYCLES_DEBUG)
   endif()
 
   if(WITH_CYCLES_EMBREE AND EMBREE_SYCL_SUPPORT)

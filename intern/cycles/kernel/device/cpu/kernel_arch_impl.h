@@ -342,8 +342,8 @@ void KERNEL_FUNCTION_FULL_NAME(volume_guiding_filter_y)(const ThreadKernelGlobal
       (void)buffer; \
       (void)pixel; \
       (void)width; \
-      (void)buffer_stride; \      
-    }
+      (void)buffer_stride; \
+    }    
 
 #else
 

@@ -210,7 +210,7 @@ void PathTraceWorkCPU::copy_to_display(PathTraceDisplay *display,
   const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
 
   PassAccessor::Destination destination = get_display_destination_template(display, pass_mode);
-
+  
   if (display->buffer_uchar_srgba()) {
     destination.pixels_uchar_srgba = (uchar4*)rgba_half;
   }else{
