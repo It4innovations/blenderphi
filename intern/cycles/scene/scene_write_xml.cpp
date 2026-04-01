@@ -74,12 +74,23 @@
 			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
 			attr_##name = typedesc_to_cstr(attr.name);
 
+
+#define XML_DEBUG
+
+#ifdef XML_DEBUG
+#	define XML_WRITE_DEBUG state.doc.save_file(state.filename_xml.c_str());
+#else
+#  define XML_WRITE_DEBUG
+#endif
+
 CCL_NAMESPACE_BEGIN
 
 /* XML writing state */
 
-struct XMLWriteState : public XMLWriter {
+struct XMLWriteState : public XMLWriter {    
 	Scene* scene;      /* Scene pointer. */	
+	xml_document doc;
+    string filename_xml;
 
 	XMLWriteState() :
 		scene(NULL)
@@ -344,6 +355,9 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 	for(ShaderNode * node: shader->graph->nodes) {
 		if (node->name == "output")
 			continue; // skip
+		//if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT ||
+		//	node->special_type == SHADER_SPECIAL_TYPE_GEOMETRY)
+		//  continue;
 
 		//xml_node xml_node = xml_root.append_child(node->type->name.c_str());
 		xml_node xnode = xml_write_node(state, node, xml_root);
@@ -1429,10 +1443,10 @@ void scene_write_xml_scene(XMLWriteState& state, xml_node scene_node)
 
 /* Include */
 
-void scene_write_xml_include(XMLWriteState &state, const string& filename_xml)
+void scene_write_xml_include(XMLWriteState &state)
 {
 	/* open XML document */
-	xml_document doc;
+	//xml_document doc;
 	//xml_parse_result parse_result;
 
 	//string path = path_join(state.base, src);
@@ -1442,7 +1456,7 @@ void scene_write_xml_include(XMLWriteState &state, const string& filename_xml)
 		//XMLReadState substate = state;
 		//substate.base = path_dirname(path);
 
-	string filename_bin = string(filename_xml) + string(".bin");
+	string filename_bin = string(state.filename_xml) + string(".bin");
 
 	// Open the file in binary write mode
 	state.file.open(filename_bin, std::ios::binary);
@@ -1451,7 +1465,7 @@ void scene_write_xml_include(XMLWriteState &state, const string& filename_xml)
 		return;
 	}
 
-	xml_node cycles = doc.append_child("cycles");
+	xml_node cycles = state.doc.append_child("cycles");
 	scene_write_xml_scene(state, cycles);
 	//}
 	//else {
@@ -1460,7 +1474,7 @@ void scene_write_xml_include(XMLWriteState &state, const string& filename_xml)
 	//}
 
 	// Save the XML to a file
-	doc.save_file(filename_xml.c_str());
+	state.doc.save_file(state.filename_xml.c_str());
 
 	state.file.close();
 }
@@ -1476,8 +1490,9 @@ void scene_write_xml_file(Scene* scene, const char* filepath)
 
 	state.scene = scene;
 	//std::string base = path_dirname(filepath);
+    state.filename_xml = filepath;
 
-	scene_write_xml_include(state, filepath);	
+	scene_write_xml_include(state);	
 }
 
 CCL_NAMESPACE_END
