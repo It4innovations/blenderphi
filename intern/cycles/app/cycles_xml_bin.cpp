@@ -11,7 +11,7 @@
 
 #include "graph/node_xml_bin.h"
 
-#include "scene/alembic.h"
+//#include "scene/alembic.h"
 #include "scene/background.h"
 #include "scene/camera.h"
 #include "scene/film.h"
@@ -39,8 +39,11 @@
 
 #include "app/cycles_xml_bin.h"
 
-#include <openvdb/io/Stream.h>
-#include <nanovdb/io/IO.h>
+#ifdef WITH_OPENVDB
+#	include <openvdb/io/Stream.h>
+#	include <nanovdb/io/IO.h>
+//#	include <nanovdb/util/IO.h>
+#endif
 
 #include "scene/image_oiio.h"
 #include "graph/node_xml_util.h"
@@ -417,15 +420,10 @@ static void xml_read_shader_graph(XMLReadState& state, Shader* shader, const xml
 					attr.width = width;
 					READ_ATTR_ULL(height, size_t);
 					attr.height = height;
-					READ_ATTR_ULL(depth, size_t);
-					attr.depth = depth;
-					//size_t byte_size;
-					//READ_ATTR_ULL(byte_size, size_t);
-					//attr.byte_size = byte_size;
-					//ImageDataType type;
-					
-					READ_ATTR_ENUM(image_type, ImageDataType);
-					attr.type = image_type;
+					//READ_ATTR_ULL(depth, size_t);
+					//attr.depth = depth;
+					READ_ATTR_I(type, int);
+					attr.type = (ImageDataType)type;
 
 					///* Optional color space, defaults to raw. */
 					//ustring colorspace;
@@ -475,12 +473,8 @@ static void xml_read_shader_graph(XMLReadState& state, Shader* shader, const xml
 					attr.width = width;
 					READ_ATTR_ULL(height, size_t);
 					attr.height = height;
-					READ_ATTR_ULL(depth, size_t);
-					attr.depth = depth;
-					//size_t byte_size;
-					//READ_ATTR_ULL(byte_size, size_t);
-					//attr.byte_size = byte_size;
-					//ImageDataType type;
+					//READ_ATTR_ULL(depth, size_t);
+					//attr.depth = depth;
 					READ_ATTR_ENUM(type, ImageDataType);
 					//attr.type = (ImageDataType)type;
 
@@ -621,12 +615,68 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 		attr->std = std;
 		attr->flags = flags;
 
+		//Attribute* attr = nullptr;
+
+		//AttributeStandard std_volume = ATTR_STD_NONE;
+
+		//if (name == Attribute::standard_name(ATTR_STD_VOLUME_DENSITY)) {
+		//	std_volume = ATTR_STD_VOLUME_DENSITY;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_COLOR)) {
+		//	std_volume = ATTR_STD_VOLUME_COLOR;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_FLAME)) {
+		//	std_volume = ATTR_STD_VOLUME_FLAME;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_HEAT)) {
+		//	std_volume = ATTR_STD_VOLUME_HEAT;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_TEMPERATURE)) {
+		//	std_volume = ATTR_STD_VOLUME_TEMPERATURE;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY))
+		//{
+		//	std_volume = ATTR_STD_VOLUME_VELOCITY;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY_X))
+		//{
+		//	std_volume = ATTR_STD_VOLUME_VELOCITY_X;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY_Y))
+		//{
+		//	std_volume = ATTR_STD_VOLUME_VELOCITY_Y;
+		//}
+		//else if (name == Attribute::standard_name(ATTR_STD_VOLUME_VELOCITY_Z))
+		//{
+		//	std_volume = ATTR_STD_VOLUME_VELOCITY_Z;
+		//}
+
+		//if (std_volume != ATTR_STD_NONE)
+		//{
+		//	attr = (std_volume != ATTR_STD_NONE) ?
+		//		geom->attributes.add(std_volume) :
+		//		geom->attributes.add(name, TypeFloat, ATTR_ELEMENT_VOXEL);
+
+		//	//unique_ptr<ImageLoader> loader = make_unique<BlenderVolumeLoader>(
+		//	//	b_data, b_volume, name.string(), b_render.precision());
+		//	//ImageParams params;
+		//	//params.frame = b_volume.grids.frame();
+
+		//	//attr->data_voxel() = scene->image_manager->add_image(std::move(loader), params, false);
+		//}
+		//else {
+		//	attr = geom->attributes.add(name, type_desc, element);
+		//	attr->std = std;
+		//	attr->flags = flags;
+		//}
+
 		const xml_attribute attr_buffer = node_attribute.attribute("buffer");
 		if (attr_buffer) {
 
 			const xml_attribute attr_volume_type = node_attribute.attribute("volume_type");
 			if (attr_volume_type) {
 				ustring volume_type(attr_volume_type.value());
+#ifdef WITH_OPENVDB				
 				if (volume_type == "openvdb") {
 					//std::stringstream ss;
 					//ss << attr_buffer;
@@ -693,11 +743,57 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 						nanogrid.resize(nanogrid_size);
 						memcpy(nanogrid.data(), grid_handle.data(), nanogrid_size);						
 					}
+
 					unique_ptr<ImageLoader> loader = make_unique<NanoVDBImageLoader>(nanogrid);
 					const ImageParams params;
 					attr->data_voxel() = state.scene->image_manager->add_image(std::move(loader), params, false);
 				}
-				else if (volume_type == "raw") {
+				else if (volume_type == "nanovdb_multires") {
+					//nanovdb::NanoGrid<float>* nanogrid = nullptr;
+					//size_t nanogrid_size = 0;
+					// vector<char> nanogrid;
+					vector<char> raw_data;
+					std::string filename = attr_buffer.value();
+
+					// if (xml_is_digit(filename)) {
+					// 	// TODO: using multires read
+					// 	// read_vector_from_binary_file(state, nanogrid, filename.c_str());
+					// }
+					// else {
+					// 	nanovdb::GridHandle<nanovdb::HostBuffer> grid_handle = nanovdb::io::readGrid<nanovdb::HostBuffer>(filename);
+					// 	size_t nanogrid_size = grid_handle.size();
+					// 	nanogrid.resize(nanogrid_size);
+					// 	memcpy(nanogrid.data(), grid_handle.data(), nanogrid_size);						
+					// }
+
+					// Open file in binary mode and move pointer to end to get file size
+					std::ifstream file(filename, std::ios::binary | std::ios::ate);
+
+					if (!file) {
+						std::cerr << "Error: Could not open file " << filename << std::endl;
+						continue;
+					}
+
+					// Get file size
+					std::streamsize size = file.tellg();
+					file.seekg(0, std::ios::beg);
+
+					// Allocate buffer and read file into it
+					raw_data.resize(size);
+					if (!file.read(raw_data.data(), size)) {
+						std::cerr << "Error reading file!" << std::endl;
+						continue;
+					}
+
+					file.close();			
+
+					unique_ptr<ImageLoader> loader = make_unique<NanoVDBMultiResImageLoader>(raw_data);
+					const ImageParams params;
+					attr->data_voxel() = state.scene->image_manager->add_image(std::move(loader), params, false);
+				}				
+				else 
+#endif				
+				if (volume_type == "raw") {
 					vector<char> raw_data;
 					std::string filename = attr_buffer.value();
 
@@ -808,6 +904,9 @@ static void xml_read_geom(XMLReadState& state, const xml_node xml_node_geom)
 					fprintf(stderr, "attr_volume_type is empty\n");
 				}
 			}
+
+			//geom->tag_modified();
+			//geom->tag_update(state.scene, true);
 		}
 	}
 }
@@ -1038,15 +1137,16 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 			for (Attribute& attr : geom->attributes.attributes) {
 
 				if (attr.name == attr_name) {
-					//openvdb::GridBase::Ptr float_grid;
-
-					openvdb::initialize();
+					//openvdb::GridBase::Ptr float_grid;					
 
 					device_texture* dt = attr.data_voxel().image_memory();
 					//dt->device_free();
 					//dt->host_free();
 
 					unique_ptr<ImageLoader> loader = nullptr;
+
+#ifdef WITH_OPENVDB	
+					openvdb::initialize();				
 
 					if (type == FTI_OPENVDB) {
 						// Convert the vector<uint8_t> back into a stringstream
@@ -1112,7 +1212,7 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 
 						//return;
 					}
-
+#endif
 					//else {
 					//	return;
 					//}
@@ -1150,13 +1250,13 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 				if (attr.name == attr_name) {				
 					//openvdb::GridBase::Ptr float_grid;
 
-					openvdb::initialize();
-
 					device_texture* dt = attr.data_voxel().image_memory();
 					//dt->device_free();
 					//dt->host_free();
 
 					//ImageLoader* loader = nullptr;		
+#ifdef WITH_OPENVDB					
+					openvdb::initialize();
 
 					if (type == FTI_OPENVDB) {
 						// Convert the vector<uint8_t> back into a stringstream
@@ -1219,7 +1319,7 @@ void xml_set_volume_to_attr(Scene* scene, std::string geom_name, std::string att
 
 						//return;
 					}
-
+#endif
 					//else {
 					//	return;
 					//}

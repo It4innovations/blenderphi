@@ -12,10 +12,11 @@
 
 #include "scene/node_write_xml.h"
 
-#include "scene/alembic.h"
+//#include "scene/alembic.h"
 #include "scene/background.h"
 #include "scene/camera.h"
 #include "scene/film.h"
+#include "scene/image.h"
 #include "scene/integrator.h"
 #include "scene/light.h"
 #include "scene/mesh.h"
@@ -33,6 +34,7 @@
 //#include "util/foreach.h"
 #include "util/path.h"
 #include "util/projection.h"
+#include "util/progress.h"
 #include "util/transform.h"
 #include "util/xml.h"
 #include "util/string.h"
@@ -42,7 +44,9 @@
 #include <OpenImageIO/imagebufalgo.h>
 #include <OpenImageIO/filesystem.h>
 
-#include <openvdb/io/Stream.h>
+#ifdef WITH_OPENVDB
+#	include <openvdb/io/Stream.h>
+#endif
 
 #include "graph/node_xml_util.h"
 
@@ -101,7 +105,7 @@ string write_vector_to_binary_file(XMLWriter& writer, const vector<T>& data)
 	return ss.str();
 }
 
-void save_image_to_memory(device_texture* dt, vector<char>& output_buffer) {
+void save_image_to_memory(device_image* dt, vector<char>& output_buffer) {
 #if 0
 	TypeDesc image_type;
 	switch (dt->data_type) {
@@ -408,7 +412,7 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 			ImageSlotTextureNode* img = (ImageSlotTextureNode*)node;
 			//ImageMetaData metadata = img->handle.metadata();
 
-			device_texture* dt = img->handle.image_memory();
+			device_image* dt = img->handle.vdb_image_memory();
 			if (dt && dt->host_pointer) {
 #if 0
 				std::stringstream ss;
@@ -442,10 +446,6 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 				case ImageDataType::IMAGE_DATA_TYPE_USHORT:
 					image_type = TypeDesc::USHORT;
 					break;
-					//case ImageDataType::IMAGE_DATA_TYPE_NANOVDB_FLOAT:
-					//case ImageDataType::IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
-					//case ImageDataType::IMAGE_DATA_TYPE_NANOVDB_FPN:
-					//case ImageDataType::IMAGE_DATA_TYPE_NANOVDB_FP16:
 				default:
 					fprintf(stderr, "Wrong image type");
 					return;
@@ -489,7 +489,8 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 
 				// MetaData
 				xml_node node_attribute = xnode;
-				ImageMetaData attr = img->handle.metadata();
+				Progress progress;
+				ImageMetaData attr = img->handle.metadata(progress);
 
 				bool is_rgba = (attr.type == IMAGE_DATA_TYPE_FLOAT4 ||
 					attr.type == IMAGE_DATA_TYPE_HALF4 ||
@@ -505,12 +506,8 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 				//size_t width, height, depth;
 				ADD_ATTR(width);
 				ADD_ATTR(height);
-				ADD_ATTR(depth);
-				//size_t byte_size;
-				//ADD_ATTR(byte_size);
-				//ImageDataType type;
-				//int itype = attr.type;
-				ADD_ATTR_ENUM(type);
+				//ADD_ATTR(depth);
+				ADD_ATTR(type);
 
 				///* Optional color space, defaults to raw. */
 				//ustring colorspace;
@@ -857,6 +854,7 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 					//string filename(path_join(state.base, ss.str()));
 					//openvdb::io::File(filename).write({ vdb_loader->get_grid() });
 					
+#ifdef WITH_OPENVDB  
 					// Convert the stringstream to a vector<char>
 					vector<char> file_content;
 					std::ostringstream stream(std::ios_base::binary);
@@ -867,7 +865,8 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 					ss << write_vector_to_binary_file(state, file_content);
 
 					xml_attribute attr_volume_type = node_attribute.append_attribute("volume_type");
-					attr_volume_type = "openvdb";					
+					attr_volume_type = "openvdb";
+#endif				
 				}
 				else {
 					ss << write_vector_to_binary_file(state, attr.buffer);
@@ -1482,4 +1481,3 @@ void scene_write_xml_file(Scene* scene, const char* filepath)
 }
 
 CCL_NAMESPACE_END
-

@@ -36,4 +36,3 @@ void scene_write_xml_include(Scene *scene, const string& src);
 void scene_write_xml_file(Scene* scene, const char* filepath);
 
 CCL_NAMESPACE_END
-
