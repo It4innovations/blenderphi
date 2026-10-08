@@ -11,7 +11,7 @@ back-end. Any ANARI library can be used. The ones built and tested here are:
 | `cycles` | [cyclesphi-anari](https://github.com/It4innovations/cyclesphi-anari): Cycles itself as an ANARI device | CPU, CUDA, OptiX |
 | `barney` | [barney](https://github.com/ingowald/barney) | CUDA/OptiX |
 | `visrtx` | [VisRTX](https://github.com/NVIDIA/VisRTX), RTX device | OptiX |
-| `mitsuba` | [mitsuba-anari](https://code.it4i.cz/blender/mitsuba-anari): Mitsuba 3 | CUDA (`cuda_ad_rgb`), CPU (`llvm_ad_rgb`, `scalar_rgb`) |
+| `mitsuba` | [mitsuba-anari](https://github.com/jar091/mitsuba3-anari): Mitsuba 3 | CUDA (`cuda_ad_rgb`), CPU (`llvm_ad_rgb`, `scalar_rgb`) |
 | `moonray` | [openmoonray-anari](https://code.it4i.cz/blender/openmoonray-anari): DreamWorks MoonRay | CPU (XPU) |
 | `helide` | ANARI-SDK reference device | CPU |
 | `visionaray`, `visionaray_cuda` | [anari-visionaray](https://github.com/jar091/anari-visionaray): Visionaray | CPU, CUDA (one library each) |
@@ -88,17 +88,17 @@ All repositories are cloned side by side in `F:\work\anari`. Builds go to
 
 | Directory | Repository | Branch |
 |---|---|---|
-| `ANARI-SDK` | https://github.com/jar091/ANARI-SDK | `next_release` (ANARI 0.17) |
-| `barney` | https://github.com/jar091/barney | `main` (with submodules) |
-| `VisRTX` | https://github.com/jar091/VisRTX | `next_release` |
+| `ANARI-SDK` | https://github.com/jar091/ANARI-SDK | `mjar/devel`, based on `next_release` (ANARI 0.17) |
+| `barney` | https://github.com/jar091/barney | `mjar/devel`, based on `main` (with submodules) |
+| `VisRTX` | https://github.com/jar091/VisRTX | `mjar/devel`, based on `next_release` |
 | `cyclesphi-anari` | https://github.com/It4innovations/cyclesphi-anari | `cyclesphi_dev`, merged with jeffamstutz/anari-cycles |
-| `mitsuba-anari` | https://code.it4i.cz/blender/mitsuba-anari | `main` |
+| `mitsuba-anari` | https://github.com/jar091/mitsuba3-anari | `main` (with submodules: Mitsuba 3 in `ext/mitsuba3`) |
 | `openmoonray-anari` | https://code.it4i.cz/blender/openmoonray-anari | `main` |
-| `visionaray` | https://github.com/jar091/visionaray | `master` (header-only ray tracing library) |
-| `anari-visionaray` | https://github.com/jar091/anari-visionaray | `main` |
-| `anari-ospray` | https://github.com/jar091/anari-ospray | `main` |
-| `RadeonProRenderANARI` | https://github.com/jar091/RadeonProRenderANARI | `main`, ported to ANARI 0.17 and RadeonProRender SDK 3.1.7.1 |
-| `photon` | https://github.com/jar091/photon | `main`, with a new ANARI device |
+| `visionaray` | https://github.com/jar091/visionaray | `mjar/devel`, same as `master` (header-only ray tracing library) |
+| `anari-visionaray` | https://github.com/jar091/anari-visionaray | `mjar/devel`, based on `main` |
+| `anari-ospray` | https://github.com/jar091/anari-ospray | `mjar/devel`, based on `main` |
+| `RadeonProRenderANARI` | https://github.com/jar091/RadeonProRenderANARI | `mjar/devel`, based on `main`: ported to ANARI 0.17 and RadeonProRender SDK 3.1.7.1 |
+| `photon` | https://github.com/jar091/photon | `mjar/devel`, based on `main`: with a new ANARI device |
 | `blenderphi` | https://github.com/It4innovations/blenderphi | `main-anari` |
 | `pynari` | https://github.com/jar091/pynari | `mjar/devel` (`jar091/devel` merged with the upstream `master`), see [`pynari/doc/windows/README.md`](../../../pynari/doc/windows/README.md) |
 
@@ -223,9 +223,11 @@ runtime. Changes to `cyclesphi/src/kernel` recompile the GPU kernels, which take
 
 ### 4.5 mitsuba-anari
 
-mitsuba-anari builds Mitsuba 3 and Dr.Jit as dependencies.
+mitsuba-anari builds Mitsuba 3 and Dr.Jit as dependencies. Mitsuba is a git submodule
+(`ext/mitsuba3`), which has to be checked out with its own submodules first.
 
 ```bat
+git -C mitsuba-anari submodule update --init --recursive
 cmake -S mitsuba-anari -B build/mitsuba-anari -G "Visual Studio 17 2022" -A x64 ^
   -DCMAKE_INSTALL_PREFIX=F:/work/anari/install/mitsuba ^
   -DCMAKE_PREFIX_PATH=F:/work/anari/install -DMITSUBA_ANARI_USE_SYSTEM_ANARI_SDK=ON ^
@@ -770,7 +772,7 @@ reference image. Transparent pixels are shown over a checkerboard.
 
 ## 9. Changes made to the ANARI devices
 
-All changes are local and uncommitted in the respective repositories.
+All changes are committed on the branches listed in [section 2](#2-workspace-and-sources).
 
 **blenderphi (this branch)**
 
