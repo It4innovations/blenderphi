@@ -10,6 +10,7 @@
 #include "device/device.h"
 #include "device/queue.h"
 
+#include "device/anari/device.h"
 #include "device/cpu/device.h"
 #include "device/cpu/kernel.h"
 #include "device/cuda/device.h"
@@ -67,6 +68,12 @@ vector<DeviceInfo> &Device::metal_devices()
 }
 
 vector<DeviceInfo> &Device::oneapi_devices()
+{
+  static vector<DeviceInfo> devices_;
+  return devices_;
+}
+
+vector<DeviceInfo> &Device::anari_devices()
 {
   static vector<DeviceInfo> devices_;
   return devices_;
@@ -153,6 +160,12 @@ unique_ptr<Device> Device::create(const DeviceInfo &info,
       break;
 #endif
 
+#ifdef WITH_ANARI
+    case DEVICE_ANARI:
+      device = device_anari_create(info, stats, profiler, headless);
+      break;
+#endif
+
     default:
       break;
   }
@@ -190,6 +203,9 @@ DeviceType Device::type_from_string(const char *name)
   if (strcmp(name, "HIPRT") == 0) {
     return DEVICE_HIPRT;
   }
+  if (strcmp(name, "ANARI") == 0) {
+    return DEVICE_ANARI;
+  }
 
   return DEVICE_NONE;
 }
@@ -220,6 +236,9 @@ string Device::string_from_type(DeviceType type)
   if (type == DEVICE_HIPRT) {
     return "HIPRT";
   }
+  if (type == DEVICE_ANARI) {
+    return "ANARI";
+  }
 
   return "";
 }
@@ -245,6 +264,9 @@ vector<DeviceType> Device::available_types()
 #endif
 #ifdef WITH_HIPRT
   types.push_back(DEVICE_HIPRT);
+#endif
+#ifdef WITH_ANARI
+  types.push_back(DEVICE_ANARI);
 #endif
   return types;
 }
@@ -369,6 +391,20 @@ vector<DeviceInfo> Device::available_devices(const uint mask)
   }
 #endif
 
+#ifdef WITH_ANARI
+  /* ANARI devices are only enumerated on explicit request: probing loads the back-end
+   * libraries, which is not something to do when just listing all compute devices. */
+  if ((mask & DEVICE_MASK_ANARI) && mask != DEVICE_MASK_ALL) {
+    if (!(devices_initialized_mask & DEVICE_MASK_ANARI)) {
+      device_anari_info(anari_devices());
+      devices_initialized_mask |= DEVICE_MASK_ANARI;
+    }
+    for (const DeviceInfo &info : anari_devices()) {
+      devices.push_back(info);
+    }
+  }
+#endif
+
   return devices;
 }
 
@@ -434,6 +470,16 @@ string Device::device_capabilities(const uint mask)
         capabilities += "\nMetal device capabilities:\n";
         capabilities += device_capabilities;
       }
+    }
+  }
+#endif
+
+#ifdef WITH_ANARI
+  if ((mask & DEVICE_MASK_ANARI) && mask != DEVICE_MASK_ALL) {
+    const string device_capabilities = device_anari_capabilities();
+    if (!device_capabilities.empty()) {
+      capabilities += "\nANARI device capabilities:\n";
+      capabilities += device_capabilities;
     }
   }
 #endif
@@ -534,6 +580,7 @@ void Device::free_memory()
   oneapi_devices().free_memory();
   cpu_devices().free_memory();
   metal_devices().free_memory();
+  anari_devices().free_memory();
 }
 
 unique_ptr<DeviceQueue> Device::gpu_queue_create()

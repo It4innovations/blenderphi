@@ -103,7 +103,7 @@ class DATA_PT_lens(CameraButtonsPanel, Panel):
 
         elif cam.type == 'PANO':
             engine = context.engine
-            if engine in {'CYCLES', 'BLENDER_EEVEE'}:
+            if engine in {'CYCLES', 'ANARI', 'BLENDER_EEVEE'}:
                 col.prop(cam, "panorama_type")
                 if cam.panorama_type == 'FISHEYE_EQUIDISTANT':
                     col.prop(cam, "fisheye_fov")
@@ -143,7 +143,7 @@ class DATA_PT_lens(CameraButtonsPanel, Panel):
 
         elif cam.type == 'CUSTOM':
             engine = context.engine
-            if engine == 'CYCLES':
+            if engine in {'CYCLES', 'ANARI'}:
                 sub = col.row()
                 sub.prop(cam, "custom_mode", text=" ", expand=True)
 

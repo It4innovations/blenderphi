@@ -89,6 +89,17 @@ set(SRC_DUMMY
   dummy/device.h
 )
 
+set(SRC_ANARI
+  anari/device.cpp
+  anari/device.h
+  anari/device_impl.cpp
+  anari/device_impl.h
+  anari/material.cpp
+  anari/material.h
+  anari/scene.cpp
+  anari/scene.h
+)
+
 set(SRC_MULTI
   multi/device.cpp
   multi/device.h
@@ -171,6 +182,19 @@ if(WITH_CYCLES_DEVICE_HIPRT)
   list(APPEND LIB ${HIPRT_LIBRARIES})
 endif()
 
+if(WITH_CYCLES_DEVICE_ANARI)
+  list(APPEND SRC
+    ${SRC_ANARI}
+  )
+  list(APPEND LIB
+    PUBLIC anari::anari
+    # The ANARI device mirrors the Cycles scene, see `anari/scene.cpp`.
+    PRIVATE cycles_scene
+    # Volume grids are NanoVDB images, resampled for ANARI spatial fields.
+    PRIVATE bf::dependencies::optional::nanovdb
+  )
+endif()
+
 if(WITH_CYCLES_DEVICE_METAL)
   list(APPEND LIB
     PRIVATE ${METAL_LIBRARY}
@@ -243,6 +267,7 @@ endif()
 
 source_group("cpu" FILES ${SRC_CPU})
 source_group("cuda" FILES ${SRC_CUDA})
+source_group("anari" FILES ${SRC_ANARI})
 source_group("dummy" FILES ${SRC_DUMMY})
 source_group("hip" FILES ${SRC_HIP})
 source_group("hiprt" FILES ${SRC_HIPRT})

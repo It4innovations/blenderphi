@@ -6059,6 +6059,22 @@ static void rna_def_space_view3d(BlenderRNA *brna)
                            "Use a local camera in this view, rather than scene's active camera");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, nullptr);
 
+  prop = RNA_def_property(srna, "use_local_render_device", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, nullptr, "use_local_render_device", 1);
+  RNA_def_property_ui_text(
+      prop,
+      "Use Local Render Device",
+      "Use a local ANARI render device in this view, rather than the scene's render device");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, nullptr);
+
+  prop = RNA_def_property(srna, "local_render_device", PROP_INT, PROP_NONE);
+  RNA_def_property_int_sdna(prop, nullptr, "local_render_device");
+  RNA_def_property_range(prop, 0, INT_MAX);
+  RNA_def_property_ui_text(prop,
+                           "Local Render Device",
+                           "Index of the ANARI render device used in this view");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, nullptr);
+
   prop = RNA_def_property(srna, "region_3d", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "RegionView3D");
   RNA_def_property_pointer_funcs(prop, "rna_SpaceView3D_region_3d_get", nullptr, nullptr, nullptr);

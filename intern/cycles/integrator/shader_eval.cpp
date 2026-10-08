@@ -40,6 +40,12 @@ bool ShaderEval::eval(const ShaderEvalType type,
     }
     first_device = false;
 
+    /* Devices without Cycles kernels can't evaluate shaders. */
+    if (device->info.type == DEVICE_ANARI) {
+      success = false;
+      return;
+    }
+
     device_vector<KernelShaderEvalInput> input(device, "ShaderEval input", MEM_READ_ONLY);
     device_vector<float> output(device, "ShaderEval output", MEM_READ_WRITE);
 

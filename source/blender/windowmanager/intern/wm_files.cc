@@ -523,6 +523,9 @@ static void wm_init_userdef(Main *bmain)
 #ifndef WITH_CYCLES
   BKE_addon_remove_safe(&U.addons, "cycles");
 #endif
+#ifndef WITH_ANARI
+  BKE_addon_remove_safe(&U.addons, "anari");
+#endif
 
   ui::init_userdef();
 

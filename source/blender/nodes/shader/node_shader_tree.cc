@@ -60,6 +60,7 @@ static bool shader_tree_poll(const bContext *C, bke::bNodeTreeType * /*treetype*
   /* Allow empty engine string too,
    * this is from older versions that didn't have registerable engines yet. */
   return (engine_id[0] == '\0' || STREQ(engine_id, RE_engine_id_CYCLES) ||
+          STREQ(engine_id, RE_engine_id_ANARI) ||
           !BKE_scene_use_shading_nodes_custom(scene));
 }
 

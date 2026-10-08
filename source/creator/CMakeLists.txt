@@ -1104,6 +1104,22 @@ elseif(WIN32)
     ALL
   )
 
+  if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI)
+    # ANARI front-end library, back-end libraries are found next to it or in the paths
+    # configured in the ANARI add-on preferences.
+    get_target_property(_anari_dll anari::anari IMPORTED_LOCATION_RELEASE)
+    if(NOT _anari_dll)
+      get_target_property(_anari_dll anari::anari IMPORTED_LOCATION)
+    endif()
+    if(_anari_dll)
+      windows_install_shared_manifest(
+        FILES ${_anari_dll}
+        ALL
+      )
+    endif()
+    unset(_anari_dll)
+  endif()
+
   if(WITH_VULKAN_BACKEND)
     windows_install_shared_manifest(
       FILES ${LIBDIR}/vulkan/bin/vulkan-1.dll

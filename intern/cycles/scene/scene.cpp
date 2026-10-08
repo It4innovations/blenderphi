@@ -179,6 +179,9 @@ void Scene::device_update(Device *device_, Progress &progress)
     device = device_;
   }
 
+  /* Let the device record which nodes were modified before the managers clear the flags. */
+  device->prepare_scene_update(this);
+
   const bool print_stats = need_data_update();
   bool kernels_reloaded = false;
 

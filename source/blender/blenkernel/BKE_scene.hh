@@ -269,6 +269,10 @@ bool BKE_scene_use_spherical_stereo(Scene *scene);
 bool BKE_scene_uses_blender_eevee(const Scene *scene);
 bool BKE_scene_uses_blender_workbench(const Scene *scene);
 bool BKE_scene_uses_cycles(const Scene *scene);
+/** The ANARI render engine, which renders the scene synchronized by Cycles with ANARI. */
+bool BKE_scene_uses_anari(const Scene *scene);
+/** Engines using the Cycles scene synchronization (and so Cycles shader nodes): Cycles, ANARI. */
+bool BKE_scene_uses_cycles_scene_sync(const Scene *scene);
 
 bool BKE_scene_uses_shader_previews(const Scene *scene);
 

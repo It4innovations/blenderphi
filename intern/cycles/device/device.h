@@ -46,6 +46,7 @@ enum DeviceType {
   DEVICE_METAL,
   DEVICE_ONEAPI,
   DEVICE_DUMMY,
+  DEVICE_ANARI,
 };
 
 enum DeviceTypeMask {
@@ -55,6 +56,7 @@ enum DeviceTypeMask {
   DEVICE_MASK_HIP = (1 << DEVICE_HIP),
   DEVICE_MASK_METAL = (1 << DEVICE_METAL),
   DEVICE_MASK_ONEAPI = (1 << DEVICE_ONEAPI),
+  DEVICE_MASK_ANARI = (1 << DEVICE_ANARI),
   DEVICE_MASK_ALL = ~0
 };
 
@@ -112,6 +114,13 @@ class DeviceInfo {
   int cpu_threads = 0;
   vector<DeviceInfo> multi_devices;
   string error_msg;
+
+  /* ANARI device: library name as passed to `anariLoadLibrary` (may contain a ",<path>/" suffix
+   * with the directory the library is loaded from) and the device subtype. */
+  string anari_library;
+  string anari_device_subtype;
+  /* Back-end specific device parameters as "name=value" pairs separated by ';'. */
+  string anari_device_parameters;
 
   DeviceInfo() = default;
 
@@ -265,6 +274,11 @@ class Device {
     return 0;
   }
 
+  /* Called at the beginning of the scene device update, before any of the managers clears the
+   * modified flags of the scene nodes. Devices which mirror the scene into an external scene
+   * representation (ANARI) use it to find out what changed. */
+  virtual void prepare_scene_update(Scene * /*scene*/) {}
+
   /* Called after kernel texture setup, and prior to integrator state setup. */
   virtual void optimize_for_scene(Scene * /*scene*/) {}
 
@@ -392,6 +406,7 @@ class Device {
   static vector<DeviceInfo> &hip_devices();
   static vector<DeviceInfo> &metal_devices();
   static vector<DeviceInfo> &oneapi_devices();
+  static vector<DeviceInfo> &anari_devices();
   static uint devices_initialized_mask;
 };
 

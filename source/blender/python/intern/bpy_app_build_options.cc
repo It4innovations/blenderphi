@@ -27,6 +27,7 @@ static PyStructSequence_Field app_builtopts_info_fields[] = {
     {"compositor_cpu", nullptr},
     {"cycles", nullptr},
     {"cycles_osl", nullptr},
+    {"anari", nullptr},
     {"freestyle", nullptr},
     {"image_cineon", nullptr},
     {"image_dds", nullptr},
@@ -120,6 +121,12 @@ static PyObject *make_builtopts_info()
 #endif
 
 #ifdef WITH_CYCLES_OSL
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_ANARI
   SetObjIncref(Py_True);
 #else
   SetObjIncref(Py_False);

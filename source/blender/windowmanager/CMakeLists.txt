@@ -156,6 +156,10 @@ if(WITH_CYCLES)
   add_definitions(-DWITH_CYCLES)
 endif()
 
+if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI)
+  add_definitions(-DWITH_ANARI)
+endif()
+
 if(WITH_OPENGL_BACKEND)
   add_definitions(-DWITH_OPENGL_BACKEND)
 endif()

@@ -1027,6 +1027,12 @@ SceneParams BlenderSync::get_scene_params(blender::UserDef &b_preferences,
   params.texture_cache_path = blender_absolute_path(
       b_data, nullptr, b_preferences.texture_cachedir);
 
+  if (blender_use_anari_engine(b_scene)) {
+    /* ANARI back-ends get the full images, the tiled texture cache is only for Cycles kernels. */
+    params.use_texture_cache = false;
+    params.auto_texture_cache = false;
+  }
+
   return params;
 }
 
@@ -1036,7 +1042,8 @@ SessionParams BlenderSync::get_session_params(blender::RenderEngine &b_engine,
                                               blender::UserDef &b_preferences,
                                               blender::Scene &b_scene,
                                               bool background,
-                                              float pixelsize)
+                                              float pixelsize,
+                                              const blender::View3D *b_v3d)
 {
   SessionParams params;
 
@@ -1063,6 +1070,13 @@ SessionParams BlenderSync::get_session_params(blender::RenderEngine &b_engine,
                                       params.background,
                                       (b_engine.flag & blender::RE_ENGINE_PREVIEW) != 0,
                                       params.denoise_device);
+  /* Material and light previews are rendered by Cycles itself, creating ANARI devices for
+   * every preview would make them slow. */
+  const bool use_anari = blender_use_anari_engine(b_scene) &&
+                         (b_engine.flag & blender::RE_ENGINE_PREVIEW) == 0;
+  if (use_anari) {
+    params.device = blender_anari_device_info(b_scene, b_v3d);
+  }
 
   /* samples */
   const int samples = get_int(cscene, "samples");
@@ -1129,11 +1143,12 @@ SessionParams BlenderSync::get_session_params(blender::RenderEngine &b_engine,
                          (b_engine.flag & blender::RE_ENGINE_PREVIEW) == 0 && background &&
                          BlenderSession::print_render_stats;
 
-  if (background) {
+  if (background && !use_anari) {
     params.use_auto_tile = true;
     params.tile_size = max(get_int(cscene, "tile_size"), 8);
   }
   else {
+    /* ANARI back-ends always render the full frame. */
     params.use_auto_tile = false;
   }
 

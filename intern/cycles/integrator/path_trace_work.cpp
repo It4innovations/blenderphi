@@ -6,6 +6,9 @@
 
 #include "integrator/path_trace_display.h"
 #include "integrator/path_trace_work.h"
+#ifdef WITH_ANARI
+#  include "integrator/path_trace_work_anari.h"
+#endif
 #include "integrator/path_trace_work_cpu.h"
 #include "integrator/path_trace_work_gpu.h"
 
@@ -30,6 +33,11 @@ unique_ptr<PathTraceWork> PathTraceWork::create(Device *device,
     /* Dummy devices can't perform any work. */
     return nullptr;
   }
+#ifdef WITH_ANARI
+  if (device->info.type == DEVICE_ANARI) {
+    return make_unique<PathTraceWorkANARI>(device, film, device_scene, cancel_requested_flag);
+  }
+#endif
 
   return make_unique<PathTraceWorkGPU>(device, film, device_scene, cancel_requested_flag);
 }

@@ -32,6 +32,8 @@
 
 #include "scene/osl.h"
 
+#include "device/anari/device.h"
+
 #ifdef WITH_METAL
 #  include "device/metal/device.h"
 #endif
@@ -504,6 +506,67 @@ static PyObject *available_devices_func(PyObject * /*self*/, PyObject *args)
   return ret;
 }
 
+/* ANARI devices: tuple of (id, description, library, device subtype). */
+static PyObject *anari_devices_func(PyObject * /*self*/, PyObject * /*args*/)
+{
+  vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_ANARI);
+  PyObject *ret = PyTuple_New(devices.size());
+
+  for (size_t i = 0; i < devices.size(); i++) {
+    const DeviceInfo &device = devices[i];
+    PyObject *device_tuple = PyTuple_New(4);
+    PyTuple_SET_ITEM(device_tuple, 0, pyunicode_from_string(device.id.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 1, pyunicode_from_string(device.description.c_str()));
+    PyTuple_SET_ITEM(device_tuple, 2, pyunicode_from_string(device.anari_library.c_str()));
+    PyTuple_SET_ITEM(
+        device_tuple, 3, pyunicode_from_string(device.anari_device_subtype.c_str()));
+    PyTuple_SET_ITEM(ret, i, device_tuple);
+  }
+
+  return ret;
+}
+
+static bool parse_string_list(PyObject *pylist, vector<string> &r_list)
+{
+  PyObject *sequence = PySequence_Fast(pylist, "Expected a sequence of strings");
+  if (sequence == nullptr) {
+    return false;
+  }
+  for (Py_ssize_t i = 0; i < PySequence_Fast_GET_SIZE(sequence); i++) {
+    const char *item = PyUnicode_AsUTF8(PySequence_Fast_GET_ITEM(sequence, i));
+    if (item == nullptr) {
+      Py_DECREF(sequence);
+      return false;
+    }
+    if (item[0] != '\0') {
+      r_list.push_back(item);
+    }
+  }
+  Py_DECREF(sequence);
+  return true;
+}
+
+/* Set the directories and extra library names used to find ANARI libraries. */
+static PyObject *anari_set_library_search_func(PyObject * /*self*/, PyObject *args)
+{
+  PyObject *pypaths;
+  PyObject *pynames;
+  if (!PyArg_ParseTuple(args, "OO" /* `paths`, `names` */, &pypaths, &pynames)) {
+    return nullptr;
+  }
+
+  vector<string> paths;
+  vector<string> names;
+  if (!parse_string_list(pypaths, paths) || !parse_string_list(pynames, names)) {
+    return nullptr;
+  }
+
+  device_anari_set_library_search_paths(paths);
+  device_anari_set_extra_library_names(names);
+
+  Py_RETURN_NONE;
+}
+
 #ifdef WITH_OSL
 
 static PyObject *osl_compile_func(PyObject * /*self*/, PyObject *args)
@@ -912,6 +975,10 @@ static PyMethodDef methods[] = {
     {"available_devices", available_devices_func, METH_VARARGS, ""},
     {"system_info", system_info_func, METH_NOARGS, ""},
 
+    /* ANARI devices */
+    {"anari_devices", anari_devices_func, METH_NOARGS, ""},
+    {"anari_set_library_search", anari_set_library_search_func, METH_VARARGS, ""},
+
     /* Standalone denoising */
     {"denoise", (PyCFunction)denoise_func, METH_VARARGS | METH_KEYWORDS, ""},
     {"merge", (PyCFunction)merge_func, METH_VARARGS | METH_KEYWORDS, ""},
@@ -1000,6 +1067,12 @@ void *blender::CCL_python_module_init()
 #else  /* WITH_EMBREE_GPU */
   PyModule_AddObjectRef(mod, "with_embree_gpu", Py_False);
 #endif /* WITH_EMBREE_GPU */
+
+#ifdef WITH_ANARI
+  PyModule_AddObjectRef(mod, "with_anari", Py_True);
+#else
+  PyModule_AddObjectRef(mod, "with_anari", Py_False);
+#endif
 
   if (ccl::openimagedenoise_supported()) {
     PyModule_AddObjectRef(mod, "with_openimagedenoise", Py_True);

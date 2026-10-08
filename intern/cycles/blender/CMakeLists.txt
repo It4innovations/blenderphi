@@ -111,3 +111,14 @@ blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 add_dependencies(bf_intern_cycles bf_rna)
 
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${ADDON_FILES}" ${CYCLES_INSTALL_PATH})
+
+if(WITH_CYCLES_DEVICE_ANARI)
+  # The ANARI render engine add-on, which uses this add-on for the scene settings.
+  set(ANARI_ADDON_FILES
+    addon_anari/__init__.py
+    addon_anari/properties.py
+    addon_anari/ui.py
+  )
+  string(REPLACE "addons_core/cycles" "addons_core/anari" ANARI_INSTALL_PATH "${CYCLES_INSTALL_PATH}")
+  delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${ANARI_ADDON_FILES}" ${ANARI_INSTALL_PATH})
+endif()

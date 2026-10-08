@@ -1538,6 +1538,7 @@ UserDef *BKE_blendfile_userdef_from_defaults()
         "io_scene_fbx",
         "io_scene_gltf2",
         "cycles",
+        "anari",
         "pose_library",
         "bl_pkg",
     };

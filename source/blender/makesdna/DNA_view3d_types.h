@@ -822,6 +822,11 @@ struct View3D {
   float stereo3d_volume_alpha = 0.05f;
   float stereo3d_convergence_alpha = 0.15f;
 
+  /** Local ANARI render device of this viewport, index into the list of ANARI devices. */
+  short use_local_render_device = 0;
+  char _pad_local_render_device[2] = {};
+  int local_render_device = 0;
+
   /** Display settings. */
   View3DShading shading;
   View3DOverlay overlay;

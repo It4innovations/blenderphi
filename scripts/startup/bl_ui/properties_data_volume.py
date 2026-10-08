@@ -127,7 +127,7 @@ class DATA_PT_volume_render(DataButtonsPanel, Panel):
         col = layout.column(align=True)
         col.prop(render, "space")
 
-        if scene.render.engine == 'CYCLES':
+        if scene.render.engine in {'CYCLES', 'ANARI'}:
             col.prop(render, "step_size")
 
             col = layout.column(align=True)

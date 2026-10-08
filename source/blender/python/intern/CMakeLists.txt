@@ -216,6 +216,10 @@ if(WITH_CYCLES_OSL)
   add_definitions(-DWITH_CYCLES_OSL)
 endif()
 
+if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI)
+  add_definitions(-DWITH_ANARI)
+endif()
+
 if(WITH_EMBREE)
   add_definitions(-DWITH_EMBREE)
 endif()

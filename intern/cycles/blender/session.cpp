@@ -117,7 +117,7 @@ BlenderSession::~BlenderSession()
 void BlenderSession::create_session()
 {
   const SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, *b_scene, background, pixelsize);
+      b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
   const SceneParams scene_params = BlenderSync::get_scene_params(
       b_userpref, *b_data, *b_scene, background, use_developer_ui);
 
@@ -203,7 +203,7 @@ void BlenderSession::reset_session(blender::Main &b_data, blender::Depsgraph &b_
   }
 
   const SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, *b_scene, background, pixelsize);
+      b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
   const SceneParams scene_params = BlenderSync::get_scene_params(
       b_userpref, b_data, *b_scene, background, use_developer_ui);
 
@@ -351,7 +351,7 @@ void BlenderSession::render(blender::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   const SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, *b_scene, background, pixelsize);
+      b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
       b_v3d, b_rv3d, scene->camera, width, height);
 
@@ -676,7 +676,7 @@ void BlenderSession::bake(blender::Depsgraph &b_depsgraph_,
 
   /* Get session parameters. */
   const SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, *b_scene, background, pixelsize);
+      b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
 
   /* Initialize bake manager, before we load the baking kernels. */
   scene->bake_manager->set_baking(scene, true);
@@ -775,7 +775,7 @@ void BlenderSession::synchronize(blender::Depsgraph &b_depsgraph_)
 
   /* on session/scene parameter changes, we recreate session entirely */
   const SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, *b_scene, background, pixelsize);
+      b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
   const SceneParams scene_params = BlenderSync::get_scene_params(
       b_userpref, *b_data, *b_scene, background, use_developer_ui);
 
@@ -955,7 +955,7 @@ void BlenderSession::view_draw(const int w, const int h)
     /* reset if requested */
     if (reset) {
       const SessionParams session_params = BlenderSync::get_session_params(
-          b_engine, b_userpref, *b_scene, background, pixelsize);
+          b_engine, b_userpref, *b_scene, background, pixelsize, b_v3d);
       const BufferParams buffer_params = BlenderSync::get_buffer_params(
           b_v3d, b_rv3d, scene->camera, width, height);
       if (view_paused == false) {

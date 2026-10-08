@@ -4649,7 +4649,7 @@ static const EnumPropertyItem *rna_NodeShaderAttribute_type_itemf(bContext *C,
 
   *r_free = true;
 
-  bool supports_light_attributes = !STREQ(CTX_data_scene(C)->r.engine, RE_engine_id_CYCLES) &&
+  bool supports_light_attributes = !BKE_scene_uses_cycles_scene_sync(CTX_data_scene(C)) &&
                                    CTX_wm_space_node(C)->shaderfrom == SNODE_SHADER_OBJECT;
   return itemf_function_check(
       rna_enum_shader_attribute_type_items, [&](const EnumPropertyItem *item) {
@@ -4675,7 +4675,7 @@ static const EnumPropertyItem *rna_NodeShaderVectTransform_space_itemf(bContext 
 
   *r_free = true;
 
-  bool supports_light_transform = !STREQ(CTX_data_scene(C)->r.engine, RE_engine_id_CYCLES) &&
+  bool supports_light_transform = !BKE_scene_uses_cycles_scene_sync(CTX_data_scene(C)) &&
                                   CTX_wm_space_node(C)->shaderfrom == SNODE_SHADER_OBJECT;
   return itemf_function_check(
       rna_enum_shader_vect_transform_space_items, [&](const EnumPropertyItem *item) {

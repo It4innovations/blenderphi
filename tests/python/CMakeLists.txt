@@ -1958,6 +1958,55 @@ if(TEST_SRC_DIR_EXISTS)
 endif()
 
 # ------------------------------------------------------------------------------
+# ANARI render engine smoke tests
+# ------------------------------------------------------------------------------
+
+if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI)
+  set(ANARI_TEST_LIBRARIES "" CACHE STRING
+    "ANARI libraries to run the ANARI smoke tests with, for example: helide;barney;cycles;mitsuba"
+  )
+  set(ANARI_TEST_LIBRARY_PATH "" CACHE STRING
+    "Directories containing the ANARI libraries used by the ANARI smoke tests"
+  )
+  set(ANARI_TEST_DEVICE_PARAMETERS "" CACHE STRING
+    "Per library ANARI device parameters, as <library>:<name>=<value>, for example: \
+mitsuba:mitsuba.variant=cuda_ad_rgb"
+  )
+  mark_as_advanced(ANARI_TEST_LIBRARY_PATH ANARI_TEST_DEVICE_PARAMETERS)
+
+  set(_anari_library_path_args)
+  foreach(_anari_path ${ANARI_TEST_LIBRARY_PATH})
+    list(APPEND _anari_library_path_args --library-path "${_anari_path}")
+  endforeach()
+
+  foreach(_anari_library ${ANARI_TEST_LIBRARIES})
+    set(_anari_parameters "")
+    foreach(_anari_parameter ${ANARI_TEST_DEVICE_PARAMETERS})
+      if(_anari_parameter MATCHES "^${_anari_library}:(.*)$")
+        if(_anari_parameters)
+          string(APPEND _anari_parameters "\;")
+        endif()
+        string(APPEND _anari_parameters "${CMAKE_MATCH_1}")
+      endif()
+    endforeach()
+
+    add_blender_test(
+      anari_smoke_${_anari_library}
+      --python ${CMAKE_CURRENT_LIST_DIR}/anari_smoke_tests.py
+      --
+      --library ${_anari_library}
+      ${_anari_library_path_args}
+      --device-parameters "${_anari_parameters}"
+      --outdir "${TEST_OUT_DIR}/anari"
+    )
+    # ANARI back-ends use the GPU, don't run them concurrently.
+    set_tests_properties(anari_smoke_${_anari_library} PROPERTIES RUN_SERIAL TRUE)
+    unset(_anari_parameters)
+  endforeach()
+  unset(_anari_library_path_args)
+endif()
+
+# ------------------------------------------------------------------------------
 # Remote Asset Library tests
 # ------------------------------------------------------------------------------
 if(TEST_SRC_DIR_EXISTS)

@@ -44,7 +44,8 @@ def object_light_shader_nodes_poll(context):
 
 
 def cycles_shader_nodes_poll(context):
-    return context.engine == 'CYCLES'
+    # The ANARI engine uses the Cycles shader nodes.
+    return context.engine in {'CYCLES', 'ANARI'}
 
 
 def eevee_shader_nodes_poll(context):

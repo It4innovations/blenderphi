@@ -221,7 +221,7 @@ class OUTLINER_MT_collection_view_layer(Menu):
         layout.operator("outliner.collection_holdout_set")
         layout.operator("outliner.collection_holdout_clear")
 
-        if context.engine == 'CYCLES':
+        if context.engine in {'CYCLES', 'ANARI'}:
             layout.operator("outliner.collection_indirect_only_set")
             layout.operator("outliner.collection_indirect_only_clear")
 

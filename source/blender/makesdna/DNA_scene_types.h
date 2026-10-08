@@ -3009,6 +3009,7 @@ struct Scene {
 extern const char *RE_engine_id_BLENDER_EEVEE;
 extern const char *RE_engine_id_BLENDER_WORKBENCH;
 extern const char *RE_engine_id_CYCLES;
+extern const char *RE_engine_id_ANARI;
 /** Only used for versioning. Was used during the transition period between 4.2 and 5.0. */
 extern const char *RE_engine_id_BLENDER_EEVEE_NEXT;
 

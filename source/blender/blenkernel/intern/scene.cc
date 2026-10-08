@@ -1728,6 +1728,7 @@ const char *RE_engine_id_BLENDER_EEVEE = "BLENDER_EEVEE";
 const char *RE_engine_id_BLENDER_EEVEE_NEXT = "BLENDER_EEVEE_NEXT";
 const char *RE_engine_id_BLENDER_WORKBENCH = "BLENDER_WORKBENCH";
 const char *RE_engine_id_CYCLES = "CYCLES";
+const char *RE_engine_id_ANARI = "ANARI";
 
 static void remove_sequencer_fcurves(Scene *sce)
 {
@@ -3099,9 +3100,19 @@ bool BKE_scene_uses_cycles(const Scene *scene)
   return STREQ(scene->r.engine, RE_engine_id_CYCLES);
 }
 
+bool BKE_scene_uses_anari(const Scene *scene)
+{
+  return STREQ(scene->r.engine, RE_engine_id_ANARI);
+}
+
+bool BKE_scene_uses_cycles_scene_sync(const Scene *scene)
+{
+  return BKE_scene_uses_cycles(scene) || BKE_scene_uses_anari(scene);
+}
+
 bool BKE_scene_uses_shader_previews(const Scene *scene)
 {
-  return BKE_scene_uses_blender_eevee(scene) || BKE_scene_uses_cycles(scene);
+  return BKE_scene_uses_blender_eevee(scene) || BKE_scene_uses_cycles_scene_sync(scene);
 }
 
 /* This enumeration has to match the one defined in the Cycles addon. */

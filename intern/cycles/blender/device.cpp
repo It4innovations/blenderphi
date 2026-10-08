@@ -9,6 +9,8 @@
 #include "BKE_scene.hh"
 #include "RNA_prototypes.hh"
 
+#include "DNA_view3d_types.h"
+
 CCL_NAMESPACE_BEGIN
 
 enum ComputeDevice {
@@ -199,6 +201,64 @@ DeviceInfo blender_device_info(blender::UserDef &b_preferences,
   }
 
   return device;
+}
+
+bool blender_use_anari_engine(const blender::Scene &b_scene)
+{
+#ifdef WITH_ANARI
+  return STREQ(b_scene.r.engine, "ANARI");
+#else
+  (void)b_scene;
+  return false;
+#endif
+}
+
+DeviceInfo blender_anari_device_info(blender::Scene &b_scene, const blender::View3D *b_v3d)
+{
+#ifdef WITH_ANARI
+  blender::PointerRNA scene_rna_ptr = RNA_id_pointer_create(&b_scene.id);
+  blender::PointerRNA canari = RNA_pointer_get(&scene_rna_ptr, "anari");
+
+  string device_id;
+  string device_parameters;
+  if (canari.data) {
+    device_id = get_string(canari, "device_id");
+    device_parameters = get_string(canari, "device_parameters");
+  }
+
+  const vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_ANARI);
+  if (devices.empty()) {
+    return Device::dummy_device(
+        "No ANARI device found, check the ANARI library search paths in the preferences");
+  }
+
+  size_t index = 0;
+  for (size_t i = 0; i < devices.size(); i++) {
+    if (devices[i].id == device_id) {
+      index = i;
+      break;
+    }
+  }
+
+  /* Viewport specific render device. */
+  if (b_v3d && b_v3d->use_local_render_device && b_v3d->local_render_device >= 0 &&
+      size_t(b_v3d->local_render_device) < devices.size())
+  {
+    index = size_t(b_v3d->local_render_device);
+  }
+
+  DeviceInfo device = devices[index];
+  device.anari_device_parameters = device_parameters;
+  if (!device_parameters.empty()) {
+    /* Recreate the device when the parameters change. */
+    device.id += "[" + device_parameters + "]";
+  }
+  return device;
+#else
+  (void)b_scene;
+  (void)b_v3d;
+  return Device::dummy_device("Blender was built without ANARI support");
+#endif
 }
 
 CCL_NAMESPACE_END

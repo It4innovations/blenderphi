@@ -118,7 +118,8 @@ bool object_cycles_shader_nodes_poll(const bContext *C)
     return false;
   }
   const RenderEngineType *engine_type = CTX_data_engine_type(C);
-  return STREQ(engine_type->idname, "CYCLES");
+  /* The ANARI engine uses the Cycles shader nodes. */
+  return STREQ(engine_type->idname, "CYCLES") || STREQ(engine_type->idname, "ANARI");
 }
 
 bool object_eevee_shader_nodes_poll(const bContext *C)

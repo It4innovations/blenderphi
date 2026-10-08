@@ -754,6 +754,13 @@ oneAPI targets to build AOT binaries for"
   mark_as_advanced(CYCLES_ONEAPI_SYCL_TARGETS)
 endif()
 
+# ANARI
+option(WITH_CYCLES_DEVICE_ANARI "\
+Enable Cycles ANARI device (renders the Cycles scene with ANARI back-ends such as Barney, \
+Cycles-ANARI or Mitsuba-ANARI). Requires ANARI-SDK, see anari_DIR"
+  OFF
+)
+
 # Draw Manager
 option(WITH_DRAW_DEBUG "Add extra debug capabilities to Draw Manager" OFF)
 mark_as_advanced(WITH_DRAW_DEBUG)
@@ -1435,6 +1442,16 @@ endif()
 if(WITH_CYCLES_DEVICE_HIP)
   # Currently HIP must be dynamically loaded, this may change in future toolkits
   set(WITH_HIP_DYNLOAD ON)
+endif()
+
+if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI)
+  # ANARI-SDK is not part of the precompiled libraries, point `anari_DIR` to
+  # `<anari-install>/lib/cmake/anari-<version>` or add the prefix to `CMAKE_PREFIX_PATH`.
+  find_package(anari 0.15.0 QUIET)
+  if(NOT anari_FOUND)
+    message(WARNING "ANARI-SDK not found, disabling WITH_CYCLES_DEVICE_ANARI")
+    set(WITH_CYCLES_DEVICE_ANARI OFF)
+  endif()
 endif()
 
 
@@ -2663,6 +2680,7 @@ if(FIRST_RUN)
       info_cfg_option(WITH_CYCLES_HIP_BINARIES)
       info_cfg_option(WITH_CYCLES_DEVICE_HIPRT)
     endif()
+    info_cfg_option(WITH_CYCLES_DEVICE_ANARI)
   endif()
 
   info_cfg_text("Tests:")

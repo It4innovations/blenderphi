@@ -78,6 +78,18 @@ if(WITH_DLSS)
   )
 endif()
 
+if(WITH_CYCLES_DEVICE_ANARI)
+  list(APPEND SRC
+    path_trace_work_anari.cpp
+  )
+  list(APPEND SRC_HEADERS
+    path_trace_work_anari.h
+  )
+  list(APPEND LIB
+    PRIVATE anari::anari
+  )
+endif()
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 
