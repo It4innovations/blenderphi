@@ -28,6 +28,8 @@ Development
 - [Developer Forum](https://devtalk.blender.org)
 - [Developer Documentation](https://developer.blender.org/docs/)
 
+AI agent harnesses were used for selected development, testing, and optimization tasks
+
 
 License
 -------
