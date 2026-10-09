@@ -94,7 +94,7 @@ All repositories are cloned side by side in `F:\work\anari`. Builds go to
 | `cyclesphi-anari` | https://github.com/It4innovations/cyclesphi-anari | `cyclesphi_dev`, merged with jeffamstutz/anari-cycles |
 | `mitsuba-anari` | https://github.com/jar091/mitsuba3-anari | `main` (with submodules: Mitsuba 3 in `ext/mitsuba3`) |
 | `openmoonray-anari` | https://code.it4i.cz/blender/openmoonray-anari | `main` |
-| `visionaray` | https://github.com/jar091/visionaray | `mjar/devel`, same as `master` (header-only ray tracing library) |
+| `visionaray` | https://github.com/jar091/visionaray | `mjar/devel`, based on `master` (header-only ray tracing library) |
 | `anari-visionaray` | https://github.com/jar091/anari-visionaray | `mjar/devel`, based on `main` |
 | `anari-ospray` | https://github.com/jar091/anari-ospray | `mjar/devel`, based on `main` |
 | `RadeonProRenderANARI` | https://github.com/jar091/RadeonProRenderANARI | `mjar/devel`, based on `main`: ported to ANARI 0.17 and RadeonProRender SDK 3.1.7.1 |
@@ -530,6 +530,7 @@ files changed, also run `cmake --install`.
    |---|---|
    | cycles | `computeDevice=cpu\|cuda\|optix` |
    | mitsuba | `mitsuba.variant=cuda_ad_rgb\|llvm_ad_rgb\|scalar_rgb` |
+| moonray | `moonray.executionMode=auto\|scalar\|vectorized\|xpu` |
    | rpr | `computeDevice=gpu\|cpu\|gpu+cpu`, `gpuIndex=<n>` |
    | all | `renderer=<subtype>`: a pseudo parameter that selects the ANARI renderer subtype instead of `default` |
 
@@ -658,11 +659,11 @@ Cells are *mask coverage / brightness ratio / relative difference*.
 | gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.990 / 0.034 | 1.000 / 0.993 / 0.026 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.003 | 1.000 / 1.026 / 0.118 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
 | gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.990 / 0.034 | 1.000 / 0.993 / 0.026 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.002 | 1.000 / 1.028 / 0.133 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
 | gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.009 | 1.000 / 0.987 / 0.034 | 1.000 / 0.992 / 0.023 | 1.000 / 1.001 / 0.008 | 1.000 / 0.999 / 0.003 | 1.000 / 1.030 / 0.102 | 1.000 / 1.001 / 0.010 | 1.000 / 1.000 / 0.009 | 1.000 / 0.993 / 0.021 | 1.000 / 1.000 / 0.004 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 |
-| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.010 | 1.000 / 0.984 / 0.044 | 1.000 / 0.992 / 0.025 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.036 / 0.128 | 0.987 / 0.996 / 0.018 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
+| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.010 | 1.000 / 0.984 / 0.044 | 1.000 / 0.992 / 0.025 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.036 / 0.128 | 0.987 / 0.999 / 0.017 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
 | gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 1.000 / 0.983 / 0.055 | 0.997 / 1.120 / 0.411 | 0.999 / 0.999 / 0.013 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.004 | 0.992 / 1.121 / 0.411 | 0.999 / 0.985 / 0.053 | 0.998 / 0.986 / 0.053 | 1.000 / 1.020 / 0.059 | 0.995 / 1.019 / 0.052 | 0.999 / 1.019 / 0.055 | 0.999 / 1.019 / 0.055 |
 | particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 0.999 / 0.006 | 1.000 / 0.994 / 0.032 | 1.000 / 0.997 / 0.019 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.002 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.006 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.015 | 1.000 / 1.001 / 0.002 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 |
-| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 0.999 / 0.007 | 0.998 / 0.987 / 0.048 | 1.000 / 0.994 / 0.025 | 0.997 / 0.995 / 0.022 | 1.000 / 1.007 / 0.029 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.008 | 0.997 / 1.001 / 0.006 | 1.000 / 0.996 / 0.016 | 1.000 / 1.001 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
-| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.023 | 1.000 / 0.982 / 0.051 | 1.000 / 0.992 / 0.031 | 1.000 / 1.001 / 0.022 | 1.000 / 1.023 / 0.069 | 1.000 / 1.060 / 0.184 | 1.000 / 1.003 / 0.031 | 1.000 / 1.002 / 0.019 | 0.999 / 0.992 / 0.032 | 1.000 / 1.001 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
+| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 0.999 / 0.007 | 0.998 / 0.987 / 0.048 | 1.000 / 0.994 / 0.025 | 0.997 / 0.995 / 0.022 | 1.000 / 1.007 / 0.029 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.007 | 0.997 / 1.001 / 0.006 | 1.000 / 0.996 / 0.016 | 1.000 / 1.001 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
+| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.023 | 1.000 / 0.982 / 0.051 | 1.000 / 0.992 / 0.031 | 1.000 / 1.001 / 0.022 | 1.000 / 1.023 / 0.069 | 1.000 / 1.060 / 0.184 | 1.000 / 1.003 / 0.020 | 1.000 / 1.002 / 0.019 | 0.999 / 0.992 / 0.032 | 1.000 / 1.001 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
 | text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.007 | 1.000 / 0.997 / 0.013 | 1.000 / 0.997 / 0.013 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.009 / 0.043 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.006 | 1.000 / 0.995 / 0.021 | 1.000 / 1.001 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
 | bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.004 / 0.018 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.009 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 1.021 / 0.079 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.990 / 0.038 | 1.000 / 1.001 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 |
 | metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.020 | 1.000 / 0.996 / 0.016 | 1.000 / 0.997 / 0.017 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.015 / 0.125 | 1.000 / 1.000 / 0.010 | 1.000 / 1.000 / 0.010 | 1.000 / 0.995 / 0.033 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 |
@@ -711,8 +712,11 @@ reference image. Transparent pixels are shown over a checkerboard.
   * Lights with a radius are slightly brighter (point 1.11, spot 1.12), because Mitsuba's
     sphere emitters integrate the radius differently.
   * The rough dielectric in the basic test is noisier at the same sample count.
-* **MoonRay** renders on the CPU (XPU mode when available). It is one of the slowest
-  back-ends, and at 32 samples its light-sampling noise is higher.
+* **MoonRay** renders on the CPU with all cores (vectorized mode). The device parameter
+  `moonray.executionMode=xpu` moves the ray intersections to the GPU, while shading stays
+  on the CPU; on the test machine this was slower than the CPU mode (18 s instead of 15 s
+  for the pynari `sample02`). MoonRay is one of the slowest back-ends, and at 32 samples
+  its light-sampling noise is higher.
 * **Visionaray** (CPU and CUDA).
   * Spot lights are point sources with a sharp edge, like barney, VisRTX and Mitsuba.
   * The glass sphere of the basic test (`transmission = 1`, `roughness = 0`) renders
@@ -857,7 +861,9 @@ All changes are committed on the branches listed in [section 2](#2-workspace-and
   * Bitmap textures with UV transforms, and colors from vertex attributes.
   * `specular = 0` produced NaNs in `scalar_rgb`.
   * PBR `opacity` was applied in the `opaque` alpha mode.
-  * `image1D` samplers. An unsupported sampler warns instead of failing the frame.
+  * `image1D` samplers, and `image3D` samplers driven by the surface position
+    (`worldPosition`, `objectPosition`). An unsupported sampler warns instead of failing
+    the frame.
 * **Lights and environment.**
   * Area emitters for emissive surfaces.
   * The hdri is flipped vertically and respects `visible`; an hdri replaces the ambient
@@ -871,11 +877,17 @@ All changes are committed on the branches listed in [section 2](#2-workspace-and
 * **Camera.** Depth of field.
 * **Runtime.** The `llvm_ad_rgb` variant now works (LLVM-C.dll) and no longer crashes at
   exit.
+* **Scene updates on CUDA.** Moving an instance in the viewport crashed Blender with
+  `cuda_ad_rgb`. The device puts the cached shapegroup into a new Mitsuba scene, and the
+  OptiX backend only builds the acceleration structure of groups flagged as changed. The
+  group is now flagged again.
 
 **openmoonray-anari**
 
 * **Runtime.** The DSOs now load with Blender's DLLs, by setting `AddDllDirectory`.
-  MoonRay core is built against Blender's OpenVDB.
+  MoonRay core is built against Blender's OpenVDB. The device also sets
+  `REZ_MOONRAY_ROOT` to its package: without it, the XPU mode did not find its GPU
+  programs and fell back to the CPU.
 * **Lights and environment.**
   * Spot lights.
   * The HDRI `visible` flag; the HDRI is filtered bilinearly and replaces the ambient light.
@@ -925,6 +937,16 @@ All changes are committed on the branches listed in [section 2](#2-workspace-and
     rejects hits at distance 0.
 * **Frame.** CPU device: rendering an incomplete frame left the rendering semaphore
   locked, and the next call blocked forever.
+* **Ambient light in reflections.** The path tracer only gave the ambient light to
+  diffuse surfaces, so a bounce ray that left the scene saw nothing: mirrors and glossy
+  metals lit by the ambient light alone reflected a black sky. Such rays now see the
+  ambient light, weighted by the non-diffuse share of the bounce.
+* **Shadows on the CPU device.** A ray that starts on the cap of a cone or cylinder
+  (shadow, ambient occlusion and bounce rays) could stop at its own primitive: the
+  intersectors report that hit behind the ray origin, and the BVH traversal of the
+  Visionaray library took it without checking `tmin`. A geometry made of several cones
+  or cylinders cast no shadows on itself. The traversal
+  (`visionaray/detail/bvh/intersect_ray1_bvhN*.inl`) now skips hits behind the origin.
 
 **anari-ospray**
 
@@ -942,6 +964,10 @@ All changes are committed on the branches listed in [section 2](#2-workspace-and
     lobe, so metals and glass with `specular = 0` rendered black. For OSPRay ≤ 3.2 the
     device now keeps these two lobes at full weight.
   * The default infinite `attenuationDistance` turned thin-walled glass black.
+* **Samplers.** OSPRay 3.2 picks the coarsest MIP level for texture lookups on spheres,
+  whose texture coordinate is constant per primitive: an `image1D` color map gave every
+  sphere the average color of the map. The device now disables MIP map generation
+  (`disableMipMapGeneration`).
 
 **RadeonProRenderANARI**
 
