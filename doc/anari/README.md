@@ -12,7 +12,7 @@ back-end. Any ANARI library can be used. The ones built and tested here are:
 | `barney` | [barney](https://github.com/ingowald/barney) | CUDA/OptiX |
 | `visrtx` | [VisRTX](https://github.com/NVIDIA/VisRTX), RTX device | OptiX |
 | `mitsuba` | [mitsuba-anari](https://github.com/jar091/mitsuba3-anari): Mitsuba 3 | CUDA (`cuda_ad_rgb`), CPU (`llvm_ad_rgb`, `scalar_rgb`) |
-| `moonray` | [openmoonray-anari](https://code.it4i.cz/blender/openmoonray-anari): DreamWorks MoonRay | CPU (XPU) |
+| `moonray` | [openmoonray-anari](https://github.com/jar091/openmoonray-anari): DreamWorks MoonRay | CPU (XPU) |
 | `helide` | ANARI-SDK reference device | CPU |
 | `visionaray`, `visionaray_cuda` | [anari-visionaray](https://github.com/jar091/anari-visionaray): Visionaray | CPU, CUDA (one library each) |
 | `ospray` | [anari-ospray](https://github.com/jar091/anari-ospray): Intel OSPRay | CPU |
@@ -93,7 +93,7 @@ All repositories are cloned side by side in `F:\work\anari`. Builds go to
 | `VisRTX` | https://github.com/jar091/VisRTX | `mjar/devel`, based on `next_release` |
 | `cyclesphi-anari` | https://github.com/It4innovations/cyclesphi-anari | `cyclesphi_dev`, merged with jeffamstutz/anari-cycles |
 | `mitsuba-anari` | https://github.com/jar091/mitsuba3-anari | `main` (with submodules: Mitsuba 3 in `ext/mitsuba3`) |
-| `openmoonray-anari` | https://code.it4i.cz/blender/openmoonray-anari | `main` |
+| `openmoonray-anari` | https://github.com/jar091/openmoonray-anari | `main` (with submodules: the MoonRay forks under `external/openmoonray`) |
 | `visionaray` | https://github.com/jar091/visionaray | `mjar/devel`, based on `master` (header-only ray tracing library) |
 | `anari-visionaray` | https://github.com/jar091/anari-visionaray | `mjar/devel`, based on `main` |
 | `anari-ospray` | https://github.com/jar091/anari-ospray | `mjar/devel`, based on `main` |
