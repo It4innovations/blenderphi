@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -33,7 +37,8 @@ static int node_shader_gpu_hair_info(GPUMaterial *mat,
   GPUNodeLink *intercept_link = out[INTERCEPT_SOCKET_INDEX].hasoutput ?
                                     GPU_attribute_hair_intercept(mat) :
                                     GPU_constant(&zero);
-  return GPU_stack_link(mat, node, "node_hair_info", in, out, intercept_link, length_link);
+  return GPU_stack_link(
+      mat, node, "node_hair_info", in, out, intercept_link, length_link, GPU_shading_data());
 }
 
 NODE_SHADER_MATERIALX_BEGIN
@@ -54,7 +59,7 @@ void register_node_type_sh_hair_info()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeHairInfo", SH_NODE_HAIR_INFO);
+  sh_node_type_base(&ntype, "ShaderNodeHairInfo"_ustr, SH_NODE_HAIR_INFO);
   ntype.ui_name = "Curves Info";
   ntype.ui_description = "Retrieve hair curve information";
   ntype.enum_name_legacy = "HAIR_INFO";

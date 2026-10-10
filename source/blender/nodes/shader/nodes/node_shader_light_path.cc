@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -45,7 +49,7 @@ static int node_shader_gpu_light_path(GPUMaterial *mat,
     /* Used to detect that the world has a specific look for diffuse path. */
     GPU_material_flag_set(mat, GPU_MATFLAG_IS_DIFFUSE_OR_GLOSSY_RAY_FLAG);
   }
-  return GPU_stack_link(mat, node, "node_light_path", in, out);
+  return GPU_stack_link(mat, node, "node_light_path", in, out, GPU_shading_data());
 }
 
 NODE_SHADER_MATERIALX_BEGIN
@@ -73,7 +77,7 @@ void register_node_type_sh_light_path()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeLightPath", SH_NODE_LIGHT_PATH);
+  sh_node_type_base(&ntype, "ShaderNodeLightPath"_ustr, SH_NODE_LIGHT_PATH);
   ntype.ui_name = "Light Path";
   ntype.ui_description =
       "Retrieve the type of incoming ray for which the shader is being executed.\nTypically used "

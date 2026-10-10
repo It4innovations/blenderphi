@@ -13,6 +13,7 @@
 namespace blender::gpu::shader {
 using namespace std;
 using namespace shader::parser;
+using namespace shader::parser::ast;
 using namespace metadata;
 
 void SourceProcessor::lower_strings_sequences(Parser &parser)
@@ -42,10 +43,30 @@ void SourceProcessor::lower_assert(Parser &parser, [[maybe_unused]] const string
     string replacement;
 #ifdef WITH_GPU_SHADER_ASSERT
     string condition = string(tokens[1].scope().str());
+
+    auto escape = [](string s) {
+      string result;
+      for (char c : s) {
+        if (c == '%') {
+          result += "%%";
+        }
+        else if (c == '\\') {
+          result += "\\\\";
+        }
+        else if (c == '\"') {
+          result += "\\\"";
+        }
+        else {
+          result += c;
+        }
+      }
+      return result;
+    };
+
     replacement += "if (!" + condition + ") ";
     replacement += "{";
     replacement += " printf(\"";
-    replacement += "Assertion failed: " + condition + ", ";
+    replacement += "Assertion failed: " + escape(condition) + ", ";
     replacement += "file " + filename + ", ";
     replacement += "line " + to_string(tokens[1].line_number()) + ", ";
     replacement += "thread (%u,%u,%u).\\n";
@@ -58,10 +79,62 @@ void SourceProcessor::lower_assert(Parser &parser, [[maybe_unused]] const string
   parser.apply_mutations();
 }
 
+/* Turn assert into a printf. */
+void SourceProcessor::lower_assert_ast(Parser &parser, [[maybe_unused]] const string &filename)
+{
+  /* Example: `assert(i < 0)` > `if (!(i < 0)) { printf(...); }` */
+  for (FuncCall call : parser.root().descendants_of_type<FuncCall>()) {
+    if (call.identifier().str() != "assert") {
+      continue;
+    }
+
+    string replacement;
+#ifdef WITH_GPU_SHADER_ASSERT
+    string condition = string(call.parameters().str());
+
+    auto escape = [](string s) {
+      string result;
+      for (char c : s) {
+        if (c == '%') {
+          result += "%%";
+        }
+        else if (c == '\\') {
+          result += "\\\\";
+        }
+        else if (c == '\"') {
+          result += "\\\"";
+        }
+        else {
+          result += c;
+        }
+      }
+      return result;
+    };
+
+    replacement += "if (!" + condition + ") ";
+    replacement += "{";
+    replacement += " printf(\"";
+    replacement += "Assertion failed: " + escape(condition) + ", ";
+    replacement += "file " + filename + ", ";
+    replacement += "line " + to_string(call.parameters().front().line_number()) + ", ";
+    replacement += "thread (%u,%u,%u).\\n";
+    replacement += "\"";
+    replacement += ", GPU_THREAD.x, GPU_THREAD.y, GPU_THREAD.z); ";
+    replacement += "}";
+#endif
+    parser.replace(call, replacement);
+  }
+
+  parser.apply_mutations();
+}
+
 /* Replace string literals by their hash and store the original string in the file metadata. */
 void SourceProcessor::lower_strings(Parser &parser)
 {
   parser().foreach_token(String, [&](const Token &token) {
+    if (token.scope().type() == ScopeType::Preprocessor) {
+      return;
+    }
     uint32_t hash = hash_string(string(token.str()));
     metadata::PrintfFormat format = {hash, string(token.str())};
     metadata_.printf_formats.emplace_back(format);
@@ -74,10 +147,12 @@ void SourceProcessor::lower_strings(Parser &parser)
  * This allows to emulate the variadic arguments of printf. */
 void SourceProcessor::lower_printf(Parser &parser)
 {
+  bool has_printf = false;
   parser().foreach_match("A(..)", [&](const vector<Token> &tokens) {
     if (tokens[0].str() != "printf") {
       return;
     }
+    has_printf = true;
 
     int arg_count = 0;
     tokens[1].scope().foreach_scope(ScopeType::FunctionParam, [&](const Scope &) { arg_count++; });
@@ -90,6 +165,10 @@ void SourceProcessor::lower_printf(Parser &parser)
     parser.replace(tokens.front(), tokens.back(), unrolled);
   });
   parser.apply_mutations();
+
+  if (has_printf) {
+    metadata_.builtins.emplace_back(Builtin::printf);
+  }
 }
 
 }  // namespace blender::gpu::shader

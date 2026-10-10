@@ -41,22 +41,22 @@ static void search_link_ops(GatherLinkSearchOpParams &params)
 {
   if (params.other_socket().type == SOCK_GEOMETRY) {
     params.add_item(IFACE_("Volume"), [](LinkSearchOpParams &params) {
-      bNode &node = params.add_node("GeometryNodeStoreNamedGrid");
+      bNode &node = params.add_node("GeometryNodeStoreNamedGrid"_ustr);
       params.update_and_connect_available_socket(node, "Volume"_ustr);
     });
   }
   if (params.in_out() == SOCK_IN) {
     if (params.other_socket().type == SOCK_STRING) {
       params.add_item(IFACE_("Name"), [](LinkSearchOpParams &params) {
-        bNode &node = params.add_node("GeometryNodeStoreNamedGrid");
+        bNode &node = params.add_node("GeometryNodeStoreNamedGrid"_ustr);
         params.update_and_connect_available_socket(node, "Name"_ustr);
       });
     }
     if (const std::optional<VolumeGridType> data_type = bke::socket_type_to_grid_type(
-            eNodeSocketDatatype(params.other_socket().type)))
+            params.other_socket().type))
     {
       params.add_item(IFACE_("Grid"), [data_type](LinkSearchOpParams &params) {
-        bNode &node = params.add_node("GeometryNodeStoreNamedGrid");
+        bNode &node = params.add_node("GeometryNodeStoreNamedGrid"_ustr);
         node.custom1 = *data_type;
         params.update_and_connect_available_socket(node, "Grid"_ustr);
       });
@@ -120,21 +120,23 @@ static void node_geo_exec(GeoNodeExecParams params)
 
 static void node_rna(StructRNA *srna)
 {
-  RNA_def_node_enum(srna,
-                    "data_type",
-                    "Data Type",
-                    "Type of grid data",
-                    rna_enum_volume_grid_data_type_items,
-                    NOD_inline_enum_accessors(custom1),
-                    VOLUME_GRID_FLOAT,
-                    grid_data_type_socket_items_filter_fn);
+  PropertyRNA *prop;
+  prop = RNA_def_node_enum(srna,
+                           "data_type",
+                           "Data Type",
+                           "Type of grid data",
+                           rna_enum_volume_grid_data_type_items,
+                           NOD_inline_enum_accessors(custom1),
+                           VOLUME_GRID_FLOAT,
+                           grid_data_type_socket_items_filter_fn);
+  RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_VOLUME);
 }
 
 static void node_register()
 {
   static bke::bNodeType ntype;
 
-  geo_node_type_base(&ntype, "GeometryNodeStoreNamedGrid", GEO_NODE_STORE_NAMED_GRID);
+  geo_node_type_base(&ntype, "GeometryNodeStoreNamedGrid"_ustr, GEO_NODE_STORE_NAMED_GRID);
   ntype.ui_name = "Store Named Grid";
   ntype.ui_description = "Store grid data in a volume geometry with the specified name";
   ntype.enum_name_legacy = "STORE_NAMED_GRID";

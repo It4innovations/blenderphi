@@ -35,7 +35,7 @@ static int gpu_shader_rgb(GPUMaterial *mat,
                           GPUNodeStack * /*in*/,
                           GPUNodeStack *out)
 {
-  const bNodeSocket *socket = static_cast<bNodeSocket *>(node->outputs.first);
+  const bNodeSocket *socket = node->outputs.first();
   float *value = static_cast<bNodeSocketValueRGBA *>(socket->default_value)->value;
   return GPU_link(mat, "set_rgba", GPU_uniform(value), &out->link);
 }
@@ -57,7 +57,7 @@ void register_node_type_sh_rgb()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeRGB", SH_NODE_RGB);
+  sh_node_type_base(&ntype, "ShaderNodeRGB"_ustr, SH_NODE_RGB);
   ntype.ui_name = "Color";
   ntype.ui_description = "A color picker";
   ntype.enum_name_legacy = "RGB";

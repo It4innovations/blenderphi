@@ -17,6 +17,7 @@ set(SRC
   device.cpp
   display_driver.cpp
   image.cpp
+  implicit_sharing.cpp
   geometry.cpp
   light.cpp
   light_linking.cpp
@@ -62,6 +63,7 @@ set(LIB
   PRIVATE bf::intern::guardedalloc
   PRIVATE bf::intern::clog
   PRIVATE bf::nodes
+  PRIVATE bf::nodes::shader
   PRIVATE bf::render
   PRIVATE cycles_bvh
   PRIVATE cycles_device

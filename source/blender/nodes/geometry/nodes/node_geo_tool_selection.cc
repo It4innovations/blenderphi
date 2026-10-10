@@ -11,10 +11,10 @@ namespace blender::nodes::node_geo_tool_selection_cc {
 static void node_declare(NodeDeclarationBuilder &b)
 {
   b.add_output<decl::Bool>("Boolean"_ustr, "Selection"_ustr)
-      .field_source()
+      .structure_type(StructureType::Field)
       .description("The selection of each element as a true or false value");
   b.add_output<decl::Float>("Float"_ustr)
-      .field_source()
+      .structure_type(StructureType::Field)
       .description("The selection of each element as a floating point value");
 }
 
@@ -153,20 +153,20 @@ static GField get_selection_field(const eObjectMode object_mode, const bke::Attr
 {
   switch (object_mode) {
     case OB_MODE_OBJECT:
-      return fn::make_constant_field(bke::attribute_type_to_cpp_type(data_type),
-                                     true_value(data_type));
+      return fn::GField::from_non_owning_constant(bke::attribute_type_to_cpp_type(data_type),
+                                                  true_value(data_type));
     case OB_MODE_EDIT:
-      return GField(std::make_shared<EditSelectionFieldInput>(data_type));
+      return GField::from_input<EditSelectionFieldInput>(data_type);
     case OB_MODE_SCULPT:
     case OB_MODE_SCULPT_CURVES:
     case OB_MODE_SCULPT_GREASE_PENCIL:
-      return GField(std::make_shared<SculptSelectionFieldInput>(data_type));
+      return GField::from_input<SculptSelectionFieldInput>(data_type);
     case OB_MODE_PAINT_GREASE_PENCIL:
-      return fn::make_constant_field(bke::attribute_type_to_cpp_type(data_type),
-                                     true_value(data_type));
+      return fn::GField::from_non_owning_constant(bke::attribute_type_to_cpp_type(data_type),
+                                                  true_value(data_type));
     default:
-      return fn::make_constant_field(bke::attribute_type_to_cpp_type(data_type),
-                                     false_value(data_type));
+      return fn::GField::from_non_owning_constant(bke::attribute_type_to_cpp_type(data_type),
+                                                  false_value(data_type));
   }
 }
 
@@ -183,7 +183,7 @@ static void node_geo_exec(GeoNodeExecParams params)
 static void node_register()
 {
   static bke::bNodeType ntype;
-  geo_node_type_base(&ntype, "GeometryNodeToolSelection", GEO_NODE_TOOL_SELECTION);
+  geo_node_type_base(&ntype, "GeometryNodeToolSelection"_ustr, GEO_NODE_TOOL_SELECTION);
   ntype.ui_name = "Selection";
   ntype.ui_description = "User selection of the edited geometry, for tool execution";
   ntype.enum_name_legacy = "TOOL_SELECTION";

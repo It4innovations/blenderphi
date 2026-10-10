@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "BLI_math_vector.hh"
@@ -79,7 +83,7 @@ void register_node_type_sh_gamma()
 
   static bke::bNodeType ntype;
 
-  common_node_type_base(&ntype, "ShaderNodeGamma", SH_NODE_GAMMA);
+  common_node_type_base(&ntype, "ShaderNodeGamma"_ustr, SH_NODE_GAMMA);
   ntype.ui_name = "Gamma";
   ntype.ui_description = "Apply a gamma correction";
   ntype.enum_name_legacy = "GAMMA";

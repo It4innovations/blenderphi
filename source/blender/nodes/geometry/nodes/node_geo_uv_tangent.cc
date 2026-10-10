@@ -36,8 +36,11 @@ static EnumPropertyItem method_items[] = {
 static void node_declare(NodeDeclarationBuilder &b)
 {
   b.add_input<decl::Menu>("Method"_ustr).static_items(method_items).optional_label();
-  b.add_input<decl::Vector>("UV"_ustr).dimensions(2).subtype(PROP_XYZ).supports_field();
-  b.add_output<decl::Vector>("Tangent"_ustr).field_source_reference_all();
+  b.add_input<decl::Vector>("UV"_ustr).dimensions(2).subtype(PROP_XYZ).structure_type(
+      StructureType::Field);
+  b.add_output<decl::Vector>("Tangent"_ustr)
+      .structure_type(StructureType::Field)
+      .propagate_references();
 }
 
 static float3 compute_triangle_tangent(const float3 &p1,
@@ -196,23 +199,17 @@ class TangentFieldInput final : public bke::MeshFieldInput {
                                    domain);
   }
 
-  void for_each_field_input_recursive(FunctionRef<void(const FieldInput &)> fn) const override
+  void foreach_recursive_field(FunctionRef<void(const GField &)> fn) const override
   {
-    uv_field_.node().for_each_field_input_recursive(fn);
+    fn(uv_field_);
   }
 
-  bool is_equal_to(const FieldNode &other) const override
+  void hash_unique(UniqueHashBytes &hash, fn::FieldHashDeep &deep_hash_cache) const override
   {
-    if (const TangentFieldInput *other_endpoint = dynamic_cast<const TangentFieldInput *>(&other))
-    {
-      return method_ == other_endpoint->method_ && uv_field_ == other_endpoint->uv_field_;
-    }
-    return false;
-  }
-
-  uint64_t hash() const override
-  {
-    return get_default_hash(method_, uv_field_);
+    static constexpr int8_t id = 0;
+    hash.add(&id);
+    hash.add(method_);
+    hash.add(deep_hash_cache.ensure(uv_field_));
   }
 
   std::optional<AttrDomain> preferred_domain(const Mesh & /*mesh*/) const override
@@ -226,14 +223,14 @@ static void node_geo_exec(GeoNodeExecParams params)
   const Method method = params.extract_input<Method>("Method"_ustr);
   Field<float3> uv_field = params.extract_input<Field<float3>>("UV"_ustr);
   params.set_output("Tangent"_ustr,
-                    Field<float3>(std::make_shared<TangentFieldInput>(method, uv_field)));
+                    Field<float3>::from_input<TangentFieldInput>(method, uv_field));
 }
 
 static void node_register()
 {
   static bke::bNodeType ntype;
 
-  geo_node_type_base(&ntype, "GeometryNodeUVTangent");
+  geo_node_type_base(&ntype, "GeometryNodeUVTangent"_ustr);
   ntype.ui_name = "UV Tangent";
   ntype.ui_description = "Generate tangent directions based on a UV map";
   ntype.nclass = NODE_CLASS_INPUT;

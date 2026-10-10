@@ -16,6 +16,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Color to use when images are not found. */
 #define IMAGE_MISSING_RGBA make_float4(1, 0, 1, 1)
+#define IMAGE_MISSING_RGB make_float3(1, 0, 1)
 
 #define KERNEL_IMAGE_NONE INT_MAX
 
@@ -73,7 +74,7 @@ enum ImageFormatType {
   IMAGE_FORMAT_EQUIANGULAR,
 };
 
-/* Extension types for image.
+/* Extension types for images.
  *
  * Defines how the image is extrapolated past its original bounds. */
 enum ExtensionType {
@@ -120,6 +121,22 @@ struct KernelImageUDIM {
 #define KERNEL_TILE_LOAD_NONE 0xFFFFFFFFU
 #define KERNEL_TILE_LOAD_REQUEST (KERNEL_TILE_LOAD_NONE - 1)
 #define KERNEL_TILE_LOAD_FAILED (KERNEL_TILE_LOAD_NONE - 2)
+
+/* Tile access state, written by the kernel and read back by the host.
+ * - NONE: Tile has not been accessed since the last clear.
+ * - REQUESTED: Kernel hit a cache miss on this tile, it needs to be loaded.
+ * - USED: Tile was accessed since the last clear.
+ *
+ * Almost all tiles will progress from REQUESTED to USED, but with dependent
+ * texture lookups it is possible a requested tile does not actually get used
+ * because the request was based on a tile that was not yet loaded and used
+ * the average color instead.
+ *
+ * This is a bitflag so we can OR these states from multiple devices.
+ */
+#define KERNEL_TILE_ACCESS_NONE 0
+#define KERNEL_TILE_ACCESS_REQUESTED (1 << 0)
+#define KERNEL_TILE_ACCESS_USED (1 << 1)
 
 /* Kernel data structure for image textures.
  *

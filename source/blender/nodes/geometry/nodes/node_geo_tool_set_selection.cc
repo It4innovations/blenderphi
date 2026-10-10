@@ -40,10 +40,10 @@ static void node_declare(NodeDeclarationBuilder &b)
   if (const bNode *node = b.node_or_null()) {
     switch (SelectionType(node->custom2)) {
       case SelectionType::Boolean:
-        b.add_input<decl::Bool>("Selection"_ustr).default_value(true).field_on_all();
+        b.add_input<decl::Bool>("Selection"_ustr).default_value(true).evaluated_geometry_field();
         break;
       case SelectionType::Float:
-        b.add_input<decl::Float>("Selection"_ustr).default_value(1.0f).field_on_all();
+        b.add_input<decl::Float>("Selection"_ustr).default_value(1.0f).evaluated_geometry_field();
         break;
     }
   }
@@ -80,7 +80,7 @@ static GField invert_selection(const GField &selection)
 
   static const mf::MultiFunction &invert = fn::multi_function::registry::lookup(
       "float - float"_ustr);
-  return GField(FieldOperation::from(invert, {fn::make_constant_field(1.0f), selection}));
+  return GField(FieldOperation::from(invert, {fn::Field<float>(1.0f), selection}));
 }
 
 /**
@@ -124,7 +124,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       remove_with_wrong_domain(attributes, ".select_poly", AttrDomain::Face);
       switch (mode) {
         case OB_MODE_EDIT: {
-          const Field<bool> field = conversions.try_convert(selection, CPPType::get<bool>());
+          const Field<bool> field = *conversions.try_convert<bool>(selection);
           switch (domain) {
             case AttrDomain::Point:
               bke::try_capture_field_on_geometry(geometry.get_component_for_write<MeshComponent>(),
@@ -154,11 +154,10 @@ static void node_geo_exec(GeoNodeExecParams params)
           break;
         }
         case OB_MODE_SCULPT: {
-          GField on_domain = GField(
-              std::make_shared<bke::EvaluateOnDomainInput>(selection, domain));
+          GField on_domain = GField::from_input<bke::EvaluateOnDomainInput>(selection, domain);
           GField clamped_and_inverted = invert_selection(clamp_selection(std::move(on_domain)));
-          const Field<float> field = conversions.try_convert(std::move(clamped_and_inverted),
-                                                             CPPType::get<float>());
+          const Field<float> field = *conversions.try_convert<float>(
+              std::move(clamped_and_inverted));
           bke::try_capture_field_on_geometry(geometry.get_component_for_write<MeshComponent>(),
                                              ".sculpt_mask",
                                              AttrDomain::Point,
@@ -186,7 +185,7 @@ static void node_geo_exec(GeoNodeExecParams params)
     }
     if (geometry.has_grease_pencil()) {
       /* Grease Pencil only supports boolean selection. */
-      const Field<bool> field = conversions.try_convert(selection, CPPType::get<bool>());
+      const Field<bool> field = *conversions.try_convert<bool>(selection);
       if (ELEM(domain, AttrDomain::Point, AttrDomain::Curve)) {
         bke::try_capture_field_on_geometry(
             geometry.get_component_for_write<GreasePencilComponent>(),
@@ -234,7 +233,7 @@ static void node_rna(StructRNA *srna)
 static void node_register()
 {
   static bke::bNodeType ntype;
-  geo_node_type_base(&ntype, "GeometryNodeToolSetSelection", GEO_NODE_TOOL_SET_SELECTION);
+  geo_node_type_base(&ntype, "GeometryNodeToolSetSelection"_ustr, GEO_NODE_TOOL_SET_SELECTION);
   ntype.ui_name = "Set Selection";
   ntype.ui_description = "Set selection of the edited geometry, for tool execution";
   ntype.enum_name_legacy = "TOOL_SELECTION_SET";

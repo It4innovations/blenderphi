@@ -19,7 +19,7 @@ static void node_declare(NodeDeclarationBuilder &b)
       .default_value(0.5f)
       .min(0.0f)
       .subtype(PROP_DISTANCE)
-      .field_on_all();
+      .evaluated_geometry_field();
   b.add_input<decl::Float>("Voxel Size"_ustr)
       .default_value(0.3f)
       .min(0.01f)
@@ -36,6 +36,9 @@ static void gather_positions_from_component(const GeometryComponent &component,
     return;
   }
   const VArray<float3> positions = *component.attributes()->lookup<float3>("position");
+  if (!positions) {
+    return;
+  }
   r_positions.resize(r_positions.size() + positions.size());
   positions.materialize(r_positions.as_mutable_span().take_back(positions.size()));
 }
@@ -110,7 +113,7 @@ static void node_register()
 {
   static bke::bNodeType ntype;
 
-  geo_node_type_base(&ntype, "GeometryNodePointsToSDFGrid", GEO_NODE_POINTS_TO_SDF_GRID);
+  geo_node_type_base(&ntype, "GeometryNodePointsToSDFGrid"_ustr, GEO_NODE_POINTS_TO_SDF_GRID);
   ntype.ui_name = "Points to SDF Grid";
   ntype.ui_description = "Create a signed distance volume grid from points";
   ntype.enum_name_legacy = "POINTS_TO_SDF_GRID";

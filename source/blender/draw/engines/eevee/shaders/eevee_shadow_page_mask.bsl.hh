@@ -11,10 +11,8 @@
 
 #pragma once
 
-#include "infos/eevee_shadow_pipeline_infos.hh"
-
 #include "eevee_shadow_page_ops.bsl.hh"
-#include "eevee_shadow_tilemap_lib.glsl"
+#include "eevee_shadow_tilemap_lib.bsl.hh"
 
 namespace eevee::shadow {
 
@@ -22,9 +20,9 @@ using TileMaps = eevee::shadow::TileMaps;
 
 /* Reuse the same enum values for these transient flag during the amend phase.
  * They are never written to the tile data SSBO. */
-#define SHADOW_TILE_AMENDED SHADOW_IS_RENDERED
+static constexpr uint SHADOW_TILE_AMENDED = SHADOW_IS_RENDERED;
 /* Visibility value to write back. */
-#define SHADOW_TILE_MASKED SHADOW_IS_ALLOCATED
+static constexpr uint SHADOW_TILE_MASKED = SHADOW_IS_ALLOCATED;
 
 int shadow_tile_offset_lds(int2 tile, int lod)
 {
@@ -50,11 +48,11 @@ struct PageMask {
 [[compute, local_size(SHADOW_TILEMAP_RES, SHADOW_TILEMAP_RES)]]
 void mask([[resource_table]] PageMask &srt,
           [[resource_table]] TileMaps &tilemaps,
-          [[global_invocation_id]] const uint3 global_invocation_id,
+          [[global_invocation_id]] const uint3 global_id,
           [[local_invocation_index]] const uint local_tile_index)
 {
-  int2 tile_co = int2(global_invocation_id.xy);
-  uint tilemap_index = global_invocation_id.z;
+  int2 tile_co = int2(global_id.xy);
+  uint tilemap_index = global_id.z;
   ShadowTileMapData tilemap = tilemaps.tilemaps_buf[tilemap_index];
 
   /* NOTE: Barriers are ok since this branch is taken by all threads. */

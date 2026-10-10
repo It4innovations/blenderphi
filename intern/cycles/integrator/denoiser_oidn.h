@@ -24,7 +24,8 @@ class OIDNDenoiser : public Denoiser {
                       const BufferParams &denoised_buffer_params,
                       RenderBuffers *render_buffers,
                       int num_samples,
-                      bool allow_inplace_modification) override;
+                      bool allow_inplace_modification,
+                      float2 pixel_jitter) override;
 
 #ifdef WITH_OPENIMAGEDENOISE
   OIDNDenoiserBase base_;
@@ -36,7 +37,6 @@ class OIDNDenoiser : public Denoiser {
 #endif
 
  protected:
-  uint get_device_type_mask() const override;
   /* We only perform one denoising at a time, since OpenImageDenoise itself is multithreaded.
    * Use this mutex whenever images are passed to the OIDN and needs to be denoised. */
   static thread_mutex mutex_;

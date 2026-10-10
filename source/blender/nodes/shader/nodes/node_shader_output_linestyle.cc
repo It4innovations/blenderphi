@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "UI_interface_layout.hh"
@@ -48,7 +52,7 @@ void register_node_type_sh_output_linestyle()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeOutputLineStyle", SH_NODE_OUTPUT_LINESTYLE);
+  sh_node_type_base(&ntype, "ShaderNodeOutputLineStyle"_ustr, SH_NODE_OUTPUT_LINESTYLE);
   ntype.ui_name = "Line Style Output";
   ntype.ui_description =
       "Control the mixing of texture information into the base color of line styles";

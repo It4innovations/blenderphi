@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 #include "node_util.hh"
 
@@ -60,7 +64,7 @@ void register_node_type_sh_tex_ies()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeTexIES", SH_NODE_TEX_IES);
+  sh_node_type_base(&ntype, "ShaderNodeTexIES"_ustr, SH_NODE_TEX_IES);
   ntype.ui_name = "IES Texture";
   ntype.ui_description =
       "Match real world lights with IES files, which store the directional intensity distribution "

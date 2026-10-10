@@ -2,7 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include "BLI_listbase.h"
+#include "BLI_listbase.hh"
 
 #include "DNA_node_types.h"
 
@@ -41,13 +41,11 @@ static void node_declare(NodeDeclarationBuilder &b)
   }
 }
 
-static void node_init(const bContext *C, PointerRNA *ptr)
+static void node_init_api(const bContext *C, PointerRNA *node_ptr)
 {
   Scene *scene = CTX_data_scene(C);
-  bNode *node = (bNode *)ptr->data;
-
-  /* store scene for dynamic declaration */
-  node->id = reinterpret_cast<ID *>(scene);
+  bNode *node = node_ptr->data_as<bNode>();
+  node->id = id_cast<ID *>(scene);
   id_us_plus(node->id);
 }
 
@@ -82,13 +80,13 @@ static void node_register()
 {
   static bke::bNodeType ntype;
 
-  cmp_node_type_base(&ntype, "CompositorNodeSwitchView", CMP_NODE_SWITCH_VIEW);
+  cmp_node_type_base(&ntype, "CompositorNodeSwitchView"_ustr, CMP_NODE_SWITCH_VIEW);
   ntype.ui_name = "Switch View";
   ntype.ui_description = "Combine the views (left and right) into a single stereo 3D output";
   ntype.enum_name_legacy = "VIEWSWITCH";
   ntype.nclass = NODE_CLASS_CONVERTER;
   ntype.declare = node_declare;
-  ntype.initfunc_api = node_init;
+  ntype.initfunc_api = node_init_api;
   ntype.get_compositor_operation = get_compositor_operation;
 
   bke::node_register_type(ntype);

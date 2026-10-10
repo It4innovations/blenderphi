@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "UI_interface_layout.hh"
@@ -30,7 +34,7 @@ void register_node_type_sh_uvalongstroke()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeUVAlongStroke", SH_NODE_UVALONGSTROKE);
+  sh_node_type_base(&ntype, "ShaderNodeUVAlongStroke"_ustr, SH_NODE_UVALONGSTROKE);
   ntype.ui_name = "UV Along Stroke";
   ntype.ui_description = "UV coordinates that map a texture along the stroke length";
   ntype.enum_name_legacy = "UVALONGSTROKE";

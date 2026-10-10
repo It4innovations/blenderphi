@@ -120,7 +120,7 @@ class MultiDevice : public Device {
     return error_msg;
   }
 
-  BVHLayoutMask get_bvh_layout_mask(const uint kernel_features) const override
+  BVHLayoutMask get_bvh_layout_mask(const uint64_t kernel_features) const override
   {
     BVHLayoutMask bvh_layout_mask = BVH_LAYOUT_ALL;
     BVHLayoutMask bvh_layout_mask_all = BVH_LAYOUT_NONE;
@@ -172,7 +172,7 @@ class MultiDevice : public Device {
     return bvh_layout_mask;
   }
 
-  bool load_kernels(const uint kernel_features) override
+  bool load_kernels(const uint64_t kernel_features) override
   {
     for (SubDevice &sub : devices) {
       if (!sub.device->load_kernels(kernel_features)) {
@@ -303,10 +303,16 @@ class MultiDevice : public Device {
     }
 
     device_ptr key = mem.device_pointer;
+    if (key == 0) {
+      return device_ptr(0);
+    }
+
     for (SubDevice &sub : devices) {
       if (sub.device.get() == sub_device) {
-        auto it = sub.ptr_map.find(key);
-        return (it != sub.ptr_map.end()) ? it->second : device_ptr(0);
+        /* Memory may be owned by a peer device when distributing memory across devices. */
+        SubDevice *owner_sub = find_matching_mem_device(key, sub);
+        auto it = owner_sub->ptr_map.find(key);
+        return (it != owner_sub->ptr_map.end()) ? it->second : device_ptr(0);
       }
     }
 
@@ -338,10 +344,9 @@ class MultiDevice : public Device {
 
     /* Get the memory owner of this key (first try current device, then peer devices) */
     SubDevice *owner_sub = &sub;
-    if (owner_sub->ptr_map.find(key) == owner_sub->ptr_map.end()) {
+    if (!owner_sub->ptr_map.contains(key)) {
       for (SubDevice *island_sub : peer_islands[sub.peer_island_index]) {
-        if (island_sub != owner_sub && island_sub->ptr_map.find(key) != island_sub->ptr_map.end())
-        {
+        if (island_sub != owner_sub && island_sub->ptr_map.contains(key)) {
           owner_sub = island_sub;
         }
       }
@@ -356,7 +361,7 @@ class MultiDevice : public Device {
     /* Get the memory owner of this key or the device with the lowest memory usage when new */
     SubDevice *owner_sub = island.front();
     for (SubDevice *island_sub : island) {
-      if (key ? (island_sub->ptr_map.find(key) != island_sub->ptr_map.end()) :
+      if (key ? (island_sub->ptr_map.contains(key)) :
                 (island_sub->device->stats.mem_used < owner_sub->device->stats.mem_used))
       {
         owner_sub = island_sub;
@@ -484,14 +489,35 @@ class MultiDevice : public Device {
       return false;
     }
 
-    for (const SubDevice &sub : devices) {
+    for (SubDevice &sub : devices) {
       if (sub.device.get() == sub_device) {
-        return sub_device->is_shared(shared_pointer, sub.ptr_map.at(key), sub_device);
+        /* Memory may be owned by a peer device when distributing memory across devices. */
+        SubDevice *owner_sub = find_matching_mem_device(key, sub);
+        auto it = owner_sub->ptr_map.find(key);
+        if (it == owner_sub->ptr_map.end()) {
+          return false;
+        }
+        return owner_sub->device->is_shared(shared_pointer, it->second, owner_sub->device.get());
       }
     }
 
     assert(!"is_shared failed to find matching device");
     return false;
+  }
+
+  void mem_or_from_device(device_memory &mem) override
+  {
+    device_ptr key = mem.device_pointer;
+
+    for (const vector<SubDevice *> &island : peer_islands) {
+      SubDevice *owner_sub = find_matching_mem_device(key, *island.front());
+      mem.device = owner_sub->device.get();
+      mem.device_pointer = owner_sub->ptr_map[key];
+      owner_sub->device->mem_or_from_device(mem);
+    }
+
+    mem.device = this;
+    mem.device_pointer = key;
   }
 
   void mem_copy_from(
@@ -597,14 +623,24 @@ class MultiDevice : public Device {
     }
   }
 
-  bool has_unified_memory() const override
+  bool has_unified_memory_any() const override
   {
     for (const SubDevice &sub : devices) {
-      if (sub.device->has_unified_memory()) {
+      if (sub.device->has_unified_memory_any()) {
         return true;
       }
     }
     return false;
+  }
+
+  bool has_unified_image_memory_all() const override
+  {
+    for (const SubDevice &sub : devices) {
+      if (!sub.device->has_unified_image_memory_all()) {
+        return false;
+      }
+    }
+    return true;
   }
 };
 

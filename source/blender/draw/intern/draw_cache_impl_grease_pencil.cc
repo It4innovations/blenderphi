@@ -14,14 +14,16 @@
 #include "BKE_grease_pencil.h"
 #include "BKE_grease_pencil.hh"
 #include "BKE_grease_pencil_fills.hh"
+#include "BKE_material.hh"
 
 #include "BLI_array_utils.hh"
-#include "BLI_listbase.h"
+#include "BLI_listbase.hh"
 #include "BLI_offset_indices.hh"
 #include "BLI_task.hh"
 #include "BLI_task_size_hints.hh"
 
 #include "DNA_grease_pencil_types.h"
+#include "DNA_material_types.h"
 
 #include "DRW_engine.hh"
 #include "DRW_render.hh"
@@ -1109,6 +1111,8 @@ static void grease_pencil_edit_batch_ensure(Object &object,
               object, info.drawing, info.layer_index, memory);
       const IndexMask nurbs_curves = grease_pencil_get_editable_selected_nurbs_curves(
           object, info.drawing, info.layer_index, memory);
+      const IndexMask selected_editable_fill_strokes = bke::greasepencil::selected_mask_to_fills(
+          selected_editable_strokes, info.drawing.strokes(), bke::AttrDomain::Curve, memory);
 
       index_buf_add_nurbs_lines(
           info.drawing, nurbs_curves, lines_data, &lines_ibo_index, &drawing_line_start_offset);
@@ -1118,7 +1122,7 @@ static void grease_pencil_edit_batch_ensure(Object &object,
                                         &handle_lines_id,
                                         &drawing_start_offset);
       index_buf_add_points(info.drawing,
-                           selected_editable_strokes,
+                           selected_editable_fill_strokes,
                            points_data,
                            &points_ibo_index,
                            &drawing_start_offset);
@@ -1215,13 +1219,62 @@ static VArray<float> interpolate_corners(const bke::CurvesGeometry &curves)
         }
         case CURVE_TYPE_NURBS:
         case CURVE_TYPE_CATMULL_ROM: {
-          /* NUBRS and Catmull-Rom are continuous and don't have corners. */
+          /* NURBS and Catmull-Rom are continuous and don't have corners. */
           break;
         }
       }
     }
   });
   return VArray<float>::from_container(std::move(eval_corners));
+}
+
+/**
+ * Calculate the number of radii that can fit within a segment. (including fractional part)
+ *
+ * For tapered segments the radii are calculated such that they tangentially touch the segment's
+ * taper and each other.
+ */
+static float segment_radius_length(const float l, const float r1, const float r2)
+{
+  const float a = r2 - r1;
+
+  /* Avoid division by zero. */
+  if (r1 <= 0.0f || l <= 0.0f || l == a) {
+    return 0.0f;
+  }
+
+  /* If the two radii are close to being the same, calculate as if they were. */
+  if (abs(a) < 0.001f * l) {
+    return l / r1;
+  }
+
+  const float E = (l + a) / (l - a);
+  const float E_i = a / r1 + 1.0f;
+
+  /* Return zero if one dot is inside the other. */
+  if (E <= 0.0f || E_i <= 0.0f) {
+    return 0.0f;
+  }
+
+  return 2.0f * log(E_i) / log(E);
+}
+
+static Array<float> get_radii_lengths(const Span<float> lengths,
+                                      const VArray<float> &radii,
+                                      const IndexRange &points)
+{
+  Array<float> radii_lengths(lengths.size());
+
+  float radii_length = 0.0f;
+  for (const int i : lengths.index_range()) {
+    const float l = lengths[i] - (i > 0 ? lengths[i - 1] : 0.0f);
+    const float r1 = radii[points[i]];
+    const float r2 = radii[points[(i + 1) % points.size()]];
+    radii_length += segment_radius_length(l, r1, r2);
+    radii_lengths[i] = radii_length;
+  }
+
+  return radii_lengths;
 }
 
 static void grease_pencil_geom_batch_ensure(Object &object,
@@ -1259,8 +1312,9 @@ static void grease_pencil_geom_batch_ensure(Object &object,
     const IndexMask visible_strokes = ed::greasepencil::retrieve_visible_strokes(
         object, info.drawing, memory);
     const std::optional<GroupedSpan<int3>> triangles = info.drawing.triangles();
+    const GroupedSpan<float3> intersection_points = info.drawing.intersection_points();
 
-    Array<int> verts_start_offsets(curves.curves_num(), 0);
+    Array<int> verts_start_offsets(curves.curves_num() + 1, 0);
 
     int num_cyclic = 0;
     int num_points = 0;
@@ -1285,6 +1339,14 @@ static void grease_pencil_geom_batch_ensure(Object &object,
       total_verts_num += (is_cyclic ? 1 : 0);
       num_points += points.size();
     });
+
+    verts_start_offsets.last() = total_verts_num;
+
+    for (const int fill_index : intersection_points.index_range()) {
+      const Span<float3> inter_points = intersection_points[fill_index];
+
+      total_verts_num += inter_points.size();
+    }
 
     total_triangles_num += (num_points + num_cyclic) * 2;
 
@@ -1362,6 +1424,8 @@ static void grease_pencil_geom_batch_ensure(Object &object,
 
     const std::optional<GroupedSpan<int3>> triangles = info.drawing.triangles();
     const std::optional<GroupedSpan<int>> fills = info.drawing.fills();
+    const GroupedSpan<float3> intersection_points = info.drawing.intersection_points();
+    const OffsetIndices<int> intersection_offsets = intersection_points.offsets;
     const Span<float4x2> texture_matrices = info.drawing.texture_matrices();
     const Span<int> verts_start_offsets = verts_start_offsets_per_visible_drawing[drawing_i];
     IndexMaskMemory memory;
@@ -1426,6 +1490,43 @@ static void grease_pencil_geom_batch_ensure(Object &object,
       MutableSpan<GreasePencilColorVert> cols_slice = cols.slice(verts_range);
 
       const Span<float> lengths = curves.evaluated_lengths_for_curve(curve_i, cyclic[curve_i]);
+      const float u_translation = u_translations[curve_i];
+      const float u_scale = u_scales[curve_i];
+      const int mat_id = materials[curve_i];
+
+      MaterialGPencilStyle *gp_style = BKE_gpencil_material_settings(&object, mat_id + 1);
+
+      Array<float> radii_lengths;
+      const bool is_line = gp_style->mode == GP_MATERIAL_MODE_LINE;
+
+      if (gp_style->placement_mode == GP_MATERIAL_PLACEMENT_RADIUS && !is_line) {
+        radii_lengths = get_radii_lengths(lengths, radii, points);
+      }
+
+      auto get_u_stroke = [&](const int i) {
+        if (is_line) {
+          const float u = i > 0 ? lengths[i - 1] : 0.0f;
+          return u_scale * u + u_translation;
+        }
+        switch (gp_style->placement_mode) {
+          case GP_MATERIAL_PLACEMENT_COUNT: {
+            if (gp_style->placement_count == 1) {
+              return float(i + int(u_translation));
+            }
+            return u_scale * float(i) + u_translation;
+          }
+          case GP_MATERIAL_PLACEMENT_RADIUS: {
+            const float u = i > 0 ? radii_lengths[i - 1] : 0.0f;
+            return u + u_translation;
+          }
+          case GP_MATERIAL_PLACEMENT_DENSITY: {
+            const float u = i > 0 ? lengths[i - 1] : 0.0f;
+            return u_scale * u + u_translation;
+          }
+        }
+        /* Fallback to single dot per point. */
+        return float(i + int(u_translation));
+      };
 
       /* First vertex is not drawn. */
       verts_slice.first().mat = -1;
@@ -1433,11 +1534,9 @@ static void grease_pencil_geom_batch_ensure(Object &object,
       verts_slice.first().stroke_id = verts_range.last();
 
       /* Write all the point attributes to the vertex buffers. Create a quad for each point. */
-      const float u_scale = u_scales[curve_i];
-      const float u_translation = u_translations[curve_i];
       for (const int i : IndexRange(points.size())) {
         const int idx = i + 1;
-        const float u_stroke = u_scale * (i > 0 ? lengths[i - 1] : 0.0f) + u_translation;
+        const float u_stroke = get_u_stroke(i);
         populate_point(verts_range,
                        curve_i,
                        start_caps[curve_i],
@@ -1455,8 +1554,7 @@ static void grease_pencil_geom_batch_ensure(Object &object,
 
       if (is_cyclic) {
         const int idx = points.size() + 1;
-        const float u = points.size() > 1 ? lengths[points.size() - 1] : 0.0f;
-        const float u_stroke = u_scale * u + u_translation;
+        const float u_stroke = get_u_stroke(points.size());
         populate_point(verts_range,
                        curve_i,
                        start_caps[curve_i],
@@ -1518,6 +1616,48 @@ static void grease_pencil_geom_batch_ensure(Object &object,
           threading::accumulated_task_sizes([&](const IndexRange range) {
             return offset_indices::sum_group_sizes(points_by_curve, visible_strokes.slice(range));
           }));
+
+      /* Add all of the intersection points at the end. */
+      for (const int fill_index : intersection_points.index_range()) {
+        const Span<float3> inter_points = intersection_points[fill_index];
+
+        if (inter_points.is_empty()) {
+          continue;
+        }
+
+        const int first_curve = (*fills)[fill_index].first();
+
+        const float4x2 texture_matrix = texture_matrices[first_curve] *
+                                        object_space_to_layer_space;
+
+        const int fill_intersect_offset = intersection_offsets[fill_index].first();
+
+        for (const int inter_i : inter_points.index_range()) {
+          const float3 &pos_3d = inter_points[inter_i];
+
+          const int verts_start_offset = verts_start_offsets.last() + inter_i +
+                                         fill_intersect_offset;
+
+          GreasePencilStrokeVert &s_vert = verts[verts_start_offset];
+          GreasePencilColorVert &c_vert = cols[verts_start_offset];
+
+          const float3 pos = math::transform_point(layer_space_to_object_space, pos_3d);
+          copy_v3_v3(s_vert.pos, pos);
+
+          s_vert.point_id = verts_start_offset;
+          s_vert.stroke_id = verts_start_offsets[first_curve];
+
+          /* The material index is allowed to be negative as it's stored as a generic attribute. To
+           * ensure the material used by the shader is valid this needs to be clamped to zero. */
+          s_vert.mat = std::max(materials[first_curve], 0) % GPENCIL_MATERIAL_BUFFER_LEN;
+
+          s_vert.u_stroke = 0.0f;
+          copy_v2_v2(s_vert.uv_fill, texture_matrix * float4(pos, 1.0f));
+
+          copy_v4_v4(c_vert.fcol, stroke_fill_colors[first_curve]);
+          c_vert.fcol[3] = (int(c_vert.fcol[3] * 10000.0f) * 10.0f) + fill_opacities[first_curve];
+        }
+      }
     }
     else {
       threading::parallel_for(
@@ -1590,7 +1730,15 @@ static void grease_pencil_geom_batch_ensure(Object &object,
             }
           });
 
+          const int fill_intersect_offset = intersection_points.is_empty() ?
+                                                0 :
+                                                intersection_offsets[fill_index].start();
+
           auto point_to_id = [&](int32_t p) {
+            if (p < 0) {
+              return (-(p + 1) + fill_intersect_offset + verts_start_offsets.last())
+                     << GP_VERTEX_ID_SHIFT;
+            }
             const int pos_ = fill_point_to_pos_map[p];
             const int curve_ = fill[pos_];
             const int fill_offset = fill_point_offset[pos_].first();
@@ -1632,10 +1780,10 @@ static void grease_pencil_geom_batch_ensure(Object &object,
       });
     }
     else {
-      visible_strokes.foreach_index([&](const int curve_i, const int pos) {
+      visible_strokes.foreach_index([&](const int curve_i) {
         const IndexRange points = points_by_curve[curve_i];
         const bool is_cyclic = cyclic[curve_i] && (points.size() > 2);
-        const int verts_start_offset = verts_start_offsets[pos];
+        const int verts_start_offset = verts_start_offsets[curve_i];
         const int num_verts = 1 + points.size() + (is_cyclic ? 1 : 0) + 1;
         const IndexRange verts_range = IndexRange(verts_start_offset, num_verts);
 

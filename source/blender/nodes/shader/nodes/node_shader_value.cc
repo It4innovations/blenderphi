@@ -38,14 +38,14 @@ static int gpu_shader_value(GPUMaterial *mat,
                             GPUNodeStack * /*in*/,
                             GPUNodeStack *out)
 {
-  const bNodeSocket *socket = static_cast<bNodeSocket *>(node->outputs.first);
+  const bNodeSocket *socket = node->outputs.first();
   float value = static_cast<bNodeSocketValueFloat *>(socket->default_value)->value;
   return GPU_link(mat, "set_value", GPU_uniform(&value), &out->link);
 }
 
 static void sh_node_value_build_multi_function(NodeMultiFunctionBuilder &builder)
 {
-  const bNodeSocket *bsocket = static_cast<bNodeSocket *>(builder.node().outputs.first);
+  const bNodeSocket *bsocket = builder.node().outputs.first();
   const bNodeSocketValueFloat *value = static_cast<const bNodeSocketValueFloat *>(
       bsocket->default_value);
   builder.construct_and_set_matching_fn<mf::CustomMF_Constant<float>>(value->value);
@@ -68,7 +68,7 @@ void register_node_type_sh_value()
 
   static bke::bNodeType ntype;
 
-  common_node_type_base(&ntype, "ShaderNodeValue", SH_NODE_VALUE);
+  common_node_type_base(&ntype, "ShaderNodeValue"_ustr, SH_NODE_VALUE);
   ntype.ui_name = "Value";
   ntype.ui_description = "Input numerical values to other nodes in the tree";
   ntype.enum_name_legacy = "VALUE";

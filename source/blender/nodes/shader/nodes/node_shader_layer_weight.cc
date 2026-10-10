@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -23,10 +27,11 @@ static int node_shader_gpu_layer_weight(GPUMaterial *mat,
                                         GPUNodeStack *out)
 {
   if (!in[1].link) {
-    GPU_link(mat, "world_normals_get", &in[1].link);
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[1].link);
   }
 
-  return GPU_stack_link(mat, node, "node_layer_weight", in, out);
+  return GPU_stack_link(
+      mat, node, "node_layer_weight", in, out, GPU_kernel_globals(), GPU_shading_data());
 }
 
 NODE_SHADER_MATERIALX_BEGIN
@@ -48,7 +53,7 @@ void register_node_type_sh_layer_weight()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeLayerWeight", SH_NODE_LAYER_WEIGHT);
+  sh_node_type_base(&ntype, "ShaderNodeLayerWeight"_ustr, SH_NODE_LAYER_WEIGHT);
   ntype.ui_name = "Layer Weight";
   ntype.ui_description =
       "Produce a blending factor depending on the angle between the surface normal and the view "

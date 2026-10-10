@@ -78,14 +78,14 @@ static void node_gather_link_search_ops(GatherLinkSearchOpParams &params)
   if (params.in_out() == SOCK_IN) {
     if (is_grid || is_dynamic) {
       params.add_item(IFACE_("Grid"), [data_type](LinkSearchOpParams &params) {
-        bNode &node = params.add_node("GeometryNodeSetGridBackground");
+        bNode &node = params.add_node("GeometryNodeSetGridBackground"_ustr);
         node.custom1 = *data_type;
         params.update_and_connect_available_socket(node, "Grid"_ustr);
       });
     }
     if (!is_grid || is_dynamic) {
       params.add_item(IFACE_("Background"), [data_type](LinkSearchOpParams &params) {
-        bNode &node = params.add_node("GeometryNodeSetGridBackground");
+        bNode &node = params.add_node("GeometryNodeSetGridBackground"_ustr);
         node.custom1 = *data_type;
         params.update_and_connect_available_socket(node, "Background"_ustr);
       });
@@ -93,7 +93,7 @@ static void node_gather_link_search_ops(GatherLinkSearchOpParams &params)
   }
   else {
     params.add_item(IFACE_("Grid"), [data_type](LinkSearchOpParams &params) {
-      bNode &node = params.add_node("GeometryNodeSetGridBackground");
+      bNode &node = params.add_node("GeometryNodeSetGridBackground"_ustr);
       node.custom1 = *data_type;
       params.update_and_connect_available_socket(node, "Grid"_ustr);
     });
@@ -110,8 +110,8 @@ static void node_geo_exec(GeoNodeExecParams params)
   }
 
   auto background_variant = params.extract_input<bke::SocketValueVariant>("Background"_ustr);
-  background_variant.convert_to_single();
-  const GPointer background = background_variant.get_single_ptr();
+  background_variant.ensure_type(*grid->cpp_type());
+  const GPointer background = background_variant.get();
 
   const bool update_inactive = params.get_input<bool>("Update Inactive"_ustr);
 
@@ -150,7 +150,7 @@ static void node_register()
 {
   static bke::bNodeType ntype;
 
-  geo_node_type_base(&ntype, "GeometryNodeSetGridBackground");
+  geo_node_type_base(&ntype, "GeometryNodeSetGridBackground"_ustr);
   ntype.ui_name = "Set Grid Background";
   ntype.ui_description = "Set the background value used for inactive voxels and tiles";
   ntype.nclass = NODE_CLASS_GEOMETRY;
@@ -159,6 +159,7 @@ static void node_register()
   ntype.geometry_node_execute = node_geo_exec;
   ntype.draw_buttons = node_layout;
   ntype.declare = node_declare;
+  ntype.default_width = bke::NodeWidth::_160;
   bke::node_register_type(ntype);
 
   node_rna(ntype.rna_ext.srna);

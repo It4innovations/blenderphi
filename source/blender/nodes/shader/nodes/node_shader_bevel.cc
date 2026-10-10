@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "UI_interface_layout.hh"
@@ -35,7 +39,7 @@ static int gpu_shader_bevel(GPUMaterial *mat,
                             GPUNodeStack *out)
 {
   if (!in[1].link) {
-    GPU_link(mat, "world_normals_get", &in[1].link);
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[1].link);
   }
 
   return GPU_stack_link(mat, node, "node_bevel", in, out);
@@ -59,7 +63,7 @@ void register_node_type_sh_bevel()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeBevel", SH_NODE_BEVEL);
+  sh_node_type_base(&ntype, "ShaderNodeBevel"_ustr, SH_NODE_BEVEL);
   ntype.ui_name = "Bevel";
   ntype.ui_description =
       "Generates normals with round corners.\nNote: only supported in Cycles, and may slow down "

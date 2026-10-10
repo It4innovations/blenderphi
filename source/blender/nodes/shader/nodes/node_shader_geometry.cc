@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -36,7 +40,8 @@ static int node_shader_gpu_geometry(GPUMaterial *mat,
   const float val[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   GPUNodeLink *orco_link = out[2].hasoutput ? GPU_attribute(mat, CD_ORCO, "") : GPU_constant(val);
 
-  const bool success = GPU_stack_link(mat, node, "node_geometry", in, out, orco_link);
+  const bool success = GPU_stack_link(
+      mat, node, "node_geometry", in, out, orco_link, GPU_kernel_globals(), GPU_shading_data());
 
   for (const auto [i, sock] : node->outputs.enumerate()) {
     node_shader_gpu_bump_tex_coord(mat, node, &out[i].link);
@@ -92,7 +97,7 @@ void register_node_type_sh_geometry()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeNewGeometry", SH_NODE_NEW_GEOMETRY);
+  sh_node_type_base(&ntype, "ShaderNodeNewGeometry"_ustr, SH_NODE_NEW_GEOMETRY);
   ntype.ui_name = "Geometry";
   ntype.ui_description = "Retrieve geometric information about the current shading point";
   ntype.enum_name_legacy = "NEW_GEOMETRY";

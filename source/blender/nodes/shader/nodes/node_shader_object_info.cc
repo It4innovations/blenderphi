@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "DNA_material_types.h"
@@ -29,7 +33,14 @@ static int node_shader_gpu_object_info(GPUMaterial *mat,
   Material *ma = GPU_material_get_material(mat);
   float index = ma ? ma->index : 0.0f;
   GPU_material_flag_set(mat, GPU_MATFLAG_OBJECT_INFO);
-  return GPU_stack_link(mat, node, "node_object_info", in, out, GPU_constant(&index));
+  return GPU_stack_link(mat,
+                        node,
+                        "node_object_info",
+                        in,
+                        out,
+                        GPU_constant(&index),
+                        GPU_kernel_globals(),
+                        GPU_shading_data());
 }
 
 NODE_SHADER_MATERIALX_BEGIN
@@ -61,7 +72,7 @@ void register_node_type_sh_object_info()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeObjectInfo", SH_NODE_OBJECT_INFO);
+  sh_node_type_base(&ntype, "ShaderNodeObjectInfo"_ustr, SH_NODE_OBJECT_INFO);
   ntype.ui_name = "Object Info";
   ntype.ui_description = "Retrieve information about the object instance";
   ntype.enum_name_legacy = "OBJECT_INFO";

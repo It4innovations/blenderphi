@@ -8,7 +8,7 @@
  */
 
 #include "BLI_function_ref.hh"
-#include "BLI_sys_types.h"
+#include "BLI_sys_types.hh"
 
 #include "BKE_duplilist.hh"
 
@@ -178,7 +178,8 @@ bool BKE_scene_validate_setscene(Main *bmain, Scene *sce);
 /**
  * Return fractional frame number taking into account sub-frames and time
  * remapping. This the time value used by animation, modifiers and physics
- * evaluation. */
+ * evaluation.
+ */
 float BKE_scene_ctime_get(const Scene *scene);
 /**
  * Convert integer frame number to fractional frame number taking into account
@@ -195,10 +196,22 @@ float BKE_scene_frame_get(const Scene *scene);
  */
 void BKE_scene_frame_set(Scene *scene, float frame);
 
+struct ScenePlaybackRange {
+  /** The start frame is always less or equal the end frame. */
+  int start_frame;
+  int end_frame;
+
+  /** Check whether a given frame falls within this range (inclusive). */
+  bool contains(const int frame) const
+  {
+    return frame >= start_frame && frame <= end_frame;
+  }
+};
+
 /**
  * Returns the current playback range, which is either the scene range or the playback range.
  */
-int2 BKE_scene_get_playback_range(const Scene *scene);
+ScenePlaybackRange BKE_scene_get_playback_range(const Scene *scene);
 /**
  * Clamps the current frame to be between the playback bounds which can be the preview range.
  */

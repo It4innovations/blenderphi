@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "DNA_customdata_types.h"
@@ -49,7 +53,16 @@ static int node_shader_gpu_tex_coord(GPUMaterial *mat,
   GPUNodeLink *orco = out[0].hasoutput ? GPU_attribute(mat, CD_ORCO, "") : GPU_constant(zero);
   GPUNodeLink *mtface = GPU_attribute(mat, CD_AUTO_FROM_NAME, "");
 
-  GPU_stack_link(mat, node, "node_tex_coord", in, out, inv_obmat, orco, mtface);
+  GPU_stack_link(mat,
+                 node,
+                 "node_tex_coord",
+                 in,
+                 out,
+                 inv_obmat,
+                 orco,
+                 mtface,
+                 GPU_kernel_globals(),
+                 GPU_shading_data());
 
   for (const auto [i, sock] : node->outputs.enumerate()) {
     node_shader_gpu_bump_tex_coord(mat, node, &out[i].link);
@@ -107,7 +120,7 @@ void register_node_type_sh_tex_coord()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeTexCoord", SH_NODE_TEX_COORD);
+  sh_node_type_base(&ntype, "ShaderNodeTexCoord"_ustr, SH_NODE_TEX_COORD);
   ntype.ui_name = "Texture Coordinate";
   ntype.ui_description =
       "Retrieve multiple types of texture coordinates.\nTypically used as inputs for texture "

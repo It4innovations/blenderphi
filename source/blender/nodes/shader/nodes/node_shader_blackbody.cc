@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "FN_multi_function_builder.hh"
 #include "NOD_multi_function.hh"
 #include "node_shader_util.hh"
@@ -72,13 +76,13 @@ void register_node_type_sh_blackbody()
 
   static bke::bNodeType ntype;
 
-  common_node_type_base(&ntype, "ShaderNodeBlackbody", SH_NODE_BLACKBODY);
+  common_node_type_base(&ntype, "ShaderNodeBlackbody"_ustr, SH_NODE_BLACKBODY);
   ntype.ui_name = "Blackbody";
   ntype.ui_description = "Convert a blackbody temperature to an RGB value";
   ntype.enum_name_legacy = "BLACKBODY";
   ntype.nclass = NODE_CLASS_CONVERTER;
   ntype.declare = file_ns::node_declare;
-  bke::node_type_size_preset(ntype, bke::eNodeSizePreset::Middle);
+  ntype.default_width = bke::NodeWidth::_160;
   ntype.gpu_fn = file_ns::node_shader_gpu_blackbody;
   ntype.build_multi_function = file_ns::sh_node_blackbody_build_multi_function;
   ntype.materialx_fn = file_ns::node_shader_materialx;

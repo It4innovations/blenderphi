@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -38,7 +42,7 @@ void register_node_type_sh_output_light()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeOutputLight", SH_NODE_OUTPUT_LIGHT);
+  sh_node_type_base(&ntype, "ShaderNodeOutputLight"_ustr, SH_NODE_OUTPUT_LIGHT);
   ntype.ui_name = "Light Output";
   ntype.ui_description = "Output light information to a light object";
   ntype.enum_name_legacy = "OUTPUT_LIGHT";

@@ -665,7 +665,7 @@ string path_files_md5_hash(const string &dir)
   return hash.get_hex();
 }
 
-static bool create_directories_recursivey(const string &path)
+static bool create_directories_recursively(const string &path)
 {
   if (path_exists(path)) {
     /* Either directory exists and there is nothing to do, or it's a file and we fail. */
@@ -674,7 +674,7 @@ static bool create_directories_recursivey(const string &path)
 
   const string parent = path_dirname(path);
   if (!parent.empty() && parent != path) {
-    if (!create_directories_recursivey(parent)) {
+    if (!create_directories_recursively(parent)) {
       return false;
     }
   }
@@ -694,7 +694,7 @@ static bool create_directories_recursivey(const string &path)
 bool path_create_directories(const string &filepath)
 {
   const string path = path_dirname(filepath);
-  return create_directories_recursivey(path);
+  return create_directories_recursively(path);
 }
 
 bool path_write_binary(const string &path, const vector<uint8_t> &binary)
@@ -912,7 +912,7 @@ static string path_source_replace_includes_recursive(const string &_source,
 
   auto pragma_once = _source.find("#pragma once");
   if (pragma_once != string::npos) {
-    if (state->pragma_onced.find(source_filepath) != state->pragma_onced.end()) {
+    if (state->pragma_onced.contains(source_filepath)) {
       return "";
     }
     state->pragma_onced.insert(source_filepath);

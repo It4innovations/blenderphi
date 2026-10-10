@@ -154,24 +154,20 @@ static int access_violation_exception_filter(unsigned int code, LPEXCEPTION_POIN
 
 GHOST_Wintab *GHOST_Wintab::loadWintab(HWND hwnd)
 {
-  /* The only way to get the current handler is by seting a new one. */
+  /* The only way to get the current handler is by setting a new one. */
   LPTOP_LEVEL_EXCEPTION_FILTER current_filter = SetUnhandledExceptionFilter(nullptr);
   SetUnhandledExceptionFilter(current_filter);
 
   /* __except and __finally cannot be used together, as such a second nested __try block is needed.
    */
-  __try
-  {
-    __try
-    {
+  __try {
+    __try {
       return GHOST_Wintab::loadWintabUnsafe(hwnd);
     }
-    __except (access_violation_exception_filter(GetExceptionCode(), GetExceptionInformation()))
-    {
+    __except (access_violation_exception_filter(GetExceptionCode(), GetExceptionInformation())) {
     }
   }
-  __finally
-  {
+  __finally {
     /* Restore our handler in case the Wintab driver replaced it. Huion's driver is known to do
      * this.
      */
@@ -515,6 +511,13 @@ bool GHOST_Wintab::trustCoordinates()
 
 bool GHOST_Wintab::testCoordinates(int sysX, int sysY, int wtX, int wtY)
 {
+  /* Some (faulty) drivers can report (WTInfoA) that the tablet extent is
+   * zero. This will cause divide by zero in mapWintabToSysCoordinates. #150560 */
+  if (tablet_coord_.x.ext == 0 || tablet_coord_.y.ext == 0) {
+    coord_trusted_ = false;
+    return false;
+  }
+
   mapWintabToSysCoordinates(wtX, wtY, wtX, wtY);
 
   /* Allow off by one pixel tolerance in case of rounding error. */

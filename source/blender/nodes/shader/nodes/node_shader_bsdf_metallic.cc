@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 #include "UI_interface_layout.hh"
@@ -13,6 +17,9 @@ namespace nodes::node_shader_bsdf_metallic_cc {
 
 static void node_declare(NodeDeclarationBuilder &b)
 {
+  const bNodeTree *ntree = b.tree_or_null();
+  const bool is_gpu_internal = ntree && (ntree->flag & NTREE_IS_GPU_SHADER_INTERNAL);
+
   b.use_custom_socket_order();
 
   b.add_output<decl::Shader>("BSDF"_ustr);
@@ -63,7 +70,7 @@ static void node_declare(NodeDeclarationBuilder &b)
       .description("Rotates the direction of anisotropy, with 1.0 going full circle");
   b.add_input<decl::Vector>("Normal"_ustr).hide_value();
   b.add_input<decl::Vector>("Tangent"_ustr).hide_value();
-  b.add_input<decl::Float>("Weight"_ustr).available(false);
+  b.add_input<decl::Float>("Weight"_ustr).available(is_gpu_internal);
 
   PanelDeclarationBuilder &film = b.add_panel("Thin Film"_ustr).default_closed(true);
   film.add_input<decl::Float>("Thin Film Thickness"_ustr)
@@ -101,7 +108,7 @@ static int node_shader_gpu_bsdf_metallic(GPUMaterial *mat,
   float use_complex_ior = (node->custom2 == SHD_PHYSICAL_CONDUCTOR) ? 1.0f : 0.0f;
 
   if (!in[7].link) {
-    GPU_link(mat, "world_normals_get", &in[7].link);
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[7].link);
   }
 
   GPU_material_flag_set(mat, GPU_MATFLAG_GLOSSY);
@@ -122,7 +129,9 @@ static int node_shader_gpu_bsdf_metallic(GPUMaterial *mat,
                         in,
                         out,
                         GPU_constant(&use_multi_scatter),
-                        GPU_constant(&use_complex_ior));
+                        GPU_constant(&use_complex_ior),
+                        GPU_kernel_globals(),
+                        GPU_shading_data());
 }
 
 static void node_shader_update_metallic(bNodeTree *ntree, bNode *node)
@@ -130,13 +139,13 @@ static void node_shader_update_metallic(bNodeTree *ntree, bNode *node)
   const bool is_physical = (node->custom2 == SHD_PHYSICAL_CONDUCTOR);
 
   bke::node_set_socket_availability(
-      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Base Color"), !is_physical);
+      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Base Color"_ustr), !is_physical);
   bke::node_set_socket_availability(
-      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Edge Tint"), !is_physical);
+      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Edge Tint"_ustr), !is_physical);
   bke::node_set_socket_availability(
-      *ntree, *bke::node_find_socket(*node, SOCK_IN, "IOR"), is_physical);
+      *ntree, *bke::node_find_socket(*node, SOCK_IN, "IOR"_ustr), is_physical);
   bke::node_set_socket_availability(
-      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Extinction"), is_physical);
+      *ntree, *bke::node_find_socket(*node, SOCK_IN, "Extinction"_ustr), is_physical);
 }
 
 NODE_SHADER_MATERIALX_BEGIN
@@ -190,7 +199,7 @@ void register_node_type_sh_bsdf_metallic()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeBsdfMetallic", SH_NODE_BSDF_METALLIC);
+  sh_node_type_base(&ntype, "ShaderNodeBsdfMetallic"_ustr, SH_NODE_BSDF_METALLIC);
   ntype.ui_name = "Metallic BSDF";
   ntype.ui_description = "Metallic reflection with microfacet distribution, and metallic fresnel";
   ntype.enum_name_legacy = "BSDF_METALLIC";
@@ -199,7 +208,7 @@ void register_node_type_sh_bsdf_metallic()
   ntype.gather_link_search_ops = search_link_ops_for_shader_bsdf_node;
   ntype.add_ui_poll = object_shader_nodes_poll;
   ntype.draw_buttons = file_ns::node_shader_buts_metallic;
-  bke::node_type_size_preset(ntype, bke::eNodeSizePreset::Large);
+  ntype.default_width = bke::NodeWidth::_240;
   ntype.initfunc = file_ns::node_shader_init_metallic;
   ntype.gpu_fn = file_ns::node_shader_gpu_bsdf_metallic;
   ntype.updatefunc = file_ns::node_shader_update_metallic;

@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -41,7 +45,7 @@ void register_node_type_sh_output_world()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeOutputWorld", SH_NODE_OUTPUT_WORLD);
+  sh_node_type_base(&ntype, "ShaderNodeOutputWorld"_ustr, SH_NODE_OUTPUT_WORLD);
   ntype.ui_name = "World Output";
   ntype.ui_description = "Output light color information to the scene's World";
   ntype.enum_name_legacy = "OUTPUT_WORLD";

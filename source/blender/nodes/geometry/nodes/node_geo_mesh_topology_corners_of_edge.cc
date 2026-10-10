@@ -15,23 +15,24 @@ namespace blender::nodes::node_geo_mesh_topology_corners_of_edge_cc {
 static void node_declare(NodeDeclarationBuilder &b)
 {
   b.add_input<decl::Int>("Edge Index"_ustr)
-      .implicit_field(NODE_DEFAULT_INPUT_INDEX_FIELD)
+      .default_input_type(NODE_DEFAULT_INPUT_INDEX_FIELD)
       .description("The edge to retrieve data from. Defaults to the edge from the context")
       .structure_type(StructureType::Field);
   b.add_input<decl::Float>("Weights"_ustr)
-      .supports_field()
+      .structure_type(StructureType::Field)
       .hide_value()
       .description("Values that sort the corners attached to the edge");
   b.add_input<decl::Int>("Sort Index"_ustr)
-      .supports_field()
+      .structure_type(StructureType::Field)
       .description("Which of the sorted corners to output. Negative indexing is supported");
   b.add_output<decl::Int>("Corner Index"_ustr)
-      .field_source_reference_all()
+      .structure_type(StructureType::Field)
+      .propagate_references()
       .description(
           "A corner of the input edge in its face's winding order, chosen by the sort index");
   b.add_output<decl::Int>("Total"_ustr)
-      .field_source()
-      .reference_pass({0})
+      .structure_type(StructureType::Field)
+      .propagate_references({0})
       .description("The number of faces or corners connected to each edge");
 }
 
@@ -126,11 +127,20 @@ class CornersOfEdgeInput final : public bke::MeshFieldInput {
     return VArray<int>::from_container(std::move(corner_of_edge));
   }
 
-  void for_each_field_input_recursive(FunctionRef<void(const FieldInput &)> fn) const override
+  void hash_unique(UniqueHashBytes &hash, fn::FieldHashDeep &deep_hash_cache) const override
   {
-    edge_index_.node().for_each_field_input_recursive(fn);
-    sort_index_.node().for_each_field_input_recursive(fn);
-    sort_weight_.node().for_each_field_input_recursive(fn);
+    static constexpr int8_t id = 0;
+    hash.add(&id);
+    hash.add(deep_hash_cache.ensure(edge_index_));
+    hash.add(deep_hash_cache.ensure(sort_index_));
+    hash.add(deep_hash_cache.ensure(sort_weight_));
+  }
+
+  void foreach_recursive_field(FunctionRef<void(const GField &)> fn) const override
+  {
+    fn(edge_index_);
+    fn(sort_index_);
+    fn(sort_weight_);
   }
 
   std::optional<AttrDomain> preferred_domain(const Mesh & /*mesh*/) const final
@@ -155,14 +165,10 @@ class CornersOfEdgeCountInput final : public bke::MeshFieldInput {
     return VArray<int>::from_container(std::move(counts));
   }
 
-  uint64_t hash() const final
+  void hash_unique(UniqueHashBytes &hash, fn::FieldHashDeep & /*deep_hash_cache*/) const override
   {
-    return 2345897985577;
-  }
-
-  bool is_equal_to(const fn::FieldNode &other) const final
-  {
-    return dynamic_cast<const CornersOfEdgeCountInput *>(&other) != nullptr;
+    static constexpr int8_t id = 0;
+    hash.add(&id);
   }
 
   std::optional<AttrDomain> preferred_domain(const Mesh & /*mesh*/) const final
@@ -175,25 +181,25 @@ static void node_geo_exec(GeoNodeExecParams params)
 {
   const Field<int> edge_index = params.extract_input<Field<int>>("Edge Index"_ustr);
   if (params.output_is_required("Total"_ustr)) {
-    params.set_output("Total"_ustr,
-                      Field<int>(std::make_shared<bke::EvaluateAtIndexInput>(
-                          edge_index,
-                          Field<int>(std::make_shared<CornersOfEdgeCountInput>()),
-                          AttrDomain::Edge)));
+    params.set_output(
+        "Total"_ustr,
+        Field<int>::from_input<bke::EvaluateAtIndexInput>(
+            edge_index, Field<int>::from_input<CornersOfEdgeCountInput>(), AttrDomain::Edge));
   }
   if (params.output_is_required("Corner Index"_ustr)) {
     params.set_output("Corner Index"_ustr,
-                      Field<int>(std::make_shared<CornersOfEdgeInput>(
+                      Field<int>::from_input<CornersOfEdgeInput>(
                           edge_index,
                           params.extract_input<Field<int>>("Sort Index"_ustr),
-                          params.extract_input<Field<float>>("Weights"_ustr))));
+                          params.extract_input<Field<float>>("Weights"_ustr)));
   }
 }
 
 static void node_register()
 {
   static bke::bNodeType ntype;
-  geo_node_type_base(&ntype, "GeometryNodeCornersOfEdge", GEO_NODE_MESH_TOPOLOGY_CORNERS_OF_EDGE);
+  geo_node_type_base(
+      &ntype, "GeometryNodeCornersOfEdge"_ustr, GEO_NODE_MESH_TOPOLOGY_CORNERS_OF_EDGE);
   ntype.ui_name = "Corners of Edge";
   ntype.ui_description = "Retrieve face corners connected to edges";
   ntype.enum_name_legacy = "CORNERS_OF_EDGE";

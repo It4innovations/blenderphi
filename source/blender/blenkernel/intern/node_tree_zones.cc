@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup bke
+ */
+
 #include <iostream>
 
 #include "BKE_node.hh"
@@ -340,11 +344,11 @@ static std::unique_ptr<bNodeTreeZones> discover_tree_zones(const bNodeTree &tree
     return {};
   }
 
-  for (const StringRefNull output_idname : {"NodeGroupOutput",
-                                            "ShaderNodeOutputMaterial",
-                                            "ShaderNodeOutputLight",
-                                            "ShaderNodeOutputWorld",
-                                            "ShaderNodeOutputAOV"})
+  for (const UString output_idname : {"NodeGroupOutput"_ustr,
+                                      "ShaderNodeOutputMaterial"_ustr,
+                                      "ShaderNodeOutputLight"_ustr,
+                                      "ShaderNodeOutputWorld"_ustr,
+                                      "ShaderNodeOutputAOV"_ustr})
   {
     for (const bNode *node : tree.nodes_by_type(output_idname)) {
       if (tree_zones->zone_by_node_id.contains(node->identifier)) {
@@ -488,6 +492,7 @@ Vector<const bNodeTreeZone *> bNodeTreeZones::get_zones_to_enter_from_root(
 const bNode *bNodeZoneType::get_corresponding_input(const bNodeTree &tree,
                                                     const bNode &output_bnode) const
 {
+  tree.ensure_topology_cache();
   for (const bNode *node : tree.nodes_by_type(this->input_idname)) {
     if (this->get_corresponding_output_id(*node) == output_bnode.identifier) {
       return node;

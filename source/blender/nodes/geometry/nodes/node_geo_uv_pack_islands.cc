@@ -55,12 +55,15 @@ static void node_declare(NodeDeclarationBuilder &b)
 {
   b.use_custom_socket_order();
   b.allow_any_socket_order();
-  b.add_input<decl::Vector>("UV"_ustr).hide_value().supports_field();
-  b.add_output<decl::Vector>("UV"_ustr).field_source_reference_all().align_with_previous();
+  b.add_input<decl::Vector>("UV"_ustr).hide_value().structure_type(StructureType::Field);
+  b.add_output<decl::Vector>("UV"_ustr)
+      .structure_type(StructureType::Field)
+      .propagate_references()
+      .align_with_previous();
   b.add_input<decl::Bool>("Selection"_ustr)
       .default_value(true)
       .hide_value()
-      .supports_field()
+      .structure_type(StructureType::Field)
       .description("Faces to consider when packing islands");
   b.add_input<decl::Float>("Margin"_ustr)
       .default_value(0.001f)
@@ -200,10 +203,10 @@ class PackIslandsFieldInput final : public bke::MeshFieldInput {
         mesh, selection_field_, uv_field_, rotate_, margin_, shape_method_, bottom_, top_, domain);
   }
 
-  void for_each_field_input_recursive(FunctionRef<void(const FieldInput &)> fn) const override
+  void foreach_recursive_field(FunctionRef<void(const GField &)> fn) const override
   {
-    selection_field_.node().for_each_field_input_recursive(fn);
-    uv_field_.node().for_each_field_input_recursive(fn);
+    fn(selection_field_);
+    fn(uv_field_);
   }
 
   std::optional<AttrDomain> preferred_domain(const Mesh & /*mesh*/) const override
@@ -224,15 +227,15 @@ static void node_geo_exec(GeoNodeExecParams params)
   const float3 bottom = params.extract_input<float3>("Bottom Left"_ustr);
   const float3 top = params.extract_input<float3>("Top Right"_ustr);
   params.set_output("UV"_ustr,
-                    Field<float3>(std::make_shared<PackIslandsFieldInput>(
-                        selection_field, uv_field, rotate, margin, shape_method, bottom, top)));
+                    Field<float3>::from_input<PackIslandsFieldInput>(
+                        selection_field, uv_field, rotate, margin, shape_method, bottom, top));
 }
 
 static void node_register()
 {
   static bke::bNodeType ntype;
 
-  geo_node_type_base(&ntype, "GeometryNodeUVPackIslands", GEO_NODE_UV_PACK_ISLANDS);
+  geo_node_type_base(&ntype, "GeometryNodeUVPackIslands"_ustr, GEO_NODE_UV_PACK_ISLANDS);
   ntype.ui_name = "Pack UV Islands";
   ntype.ui_description =
       "Scale islands of a UV map and move them so they fill the UV space as much as possible";

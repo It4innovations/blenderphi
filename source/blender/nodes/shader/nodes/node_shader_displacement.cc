@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -44,11 +48,12 @@ static int gpu_shader_displacement(GPUMaterial *mat,
                                    GPUNodeStack *out)
 {
   if (!in[3].link) {
-    GPU_link(mat, "world_normals_get", &in[3].link);
+    GPU_link(mat, "world_normals_get", GPU_shading_data(), &in[3].link);
   }
 
   if (node->custom1 == SHD_SPACE_OBJECT) {
-    return GPU_stack_link(mat, node, "node_displacement_object", in, out);
+    return GPU_stack_link(
+        mat, node, "node_displacement_object", in, out, GPU_kernel_globals(), GPU_shading_data());
   }
 
   return GPU_stack_link(mat, node, "node_displacement_world", in, out);
@@ -82,7 +87,7 @@ void register_node_type_sh_displacement()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeDisplacement", SH_NODE_DISPLACEMENT);
+  sh_node_type_base(&ntype, "ShaderNodeDisplacement"_ustr, SH_NODE_DISPLACEMENT);
   ntype.ui_name = "Displacement";
   ntype.ui_description = "Displace the surface along the surface normal";
   ntype.enum_name_legacy = "DISPLACEMENT";

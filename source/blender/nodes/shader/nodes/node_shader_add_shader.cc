@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 
 namespace blender {
@@ -60,7 +64,7 @@ void register_node_type_sh_add_shader()
 
   static bke::bNodeType ntype;
 
-  sh_node_type_base(&ntype, "ShaderNodeAddShader", SH_NODE_ADD_SHADER);
+  sh_node_type_base(&ntype, "ShaderNodeAddShader"_ustr, SH_NODE_ADD_SHADER);
   ntype.ui_name = "Add Shader";
   ntype.ui_description = "Add two Shaders together";
   ntype.enum_name_legacy = "ADD_SHADER";

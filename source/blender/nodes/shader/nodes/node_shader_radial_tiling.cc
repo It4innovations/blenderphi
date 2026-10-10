@@ -2,6 +2,10 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 
+/** \file
+ * \ingroup shdnodes
+ */
+
 #include "node_shader_util.hh"
 #include "node_util.hh"
 
@@ -192,6 +196,13 @@ class RoundedPolygonFunction : public mf::MultiFunction {
     });
   }
 
+  void hash_unique(UniqueHashBytes &hash) const override
+  {
+    static constexpr int8_t id = 0;
+    hash.add(&id);
+    hash.add(normalize_r_gon_parameter_);
+  }
+
   ExecutionHints get_execution_hints() const override
   {
     ExecutionHints hints;
@@ -215,7 +226,7 @@ void register_node_type_sh_radial_tiling()
 
   static bke::bNodeType ntype;
 
-  common_node_type_base(&ntype, "ShaderNodeRadialTiling");
+  common_node_type_base(&ntype, "ShaderNodeRadialTiling"_ustr);
   ntype.ui_name = "Radial Tiling";
   ntype.ui_description = "Transform Coordinate System for Radial Tiling";
   ntype.nclass = NODE_CLASS_OP_VECTOR;

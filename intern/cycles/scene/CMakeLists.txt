@@ -31,6 +31,7 @@ set(SRC
   image_sky.cpp
   image_vdb.cpp
   integrator.cpp
+  scene_attributes.cpp
   light.cpp
   light_tree.cpp
   light_tree_debug.cpp
@@ -50,6 +51,7 @@ set(SRC
   node_write_xml.cpp
 
   shader.cpp
+  shader.tables
   shader_graph.cpp
   shader_nodes.cpp
   stats.cpp
@@ -88,7 +90,8 @@ set(SRC_HEADERS
   pointcloud.h
   curves.h
   scene.h
-  
+  scene_attributes.h
+
   #scene_read_xml.h
   scene_write_xml.h
   node_write_xml.h
