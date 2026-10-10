@@ -74,23 +74,12 @@
 			xml_attribute attr_##name = node_attribute.append_attribute(#name); \
 			attr_##name = typedesc_to_cstr(attr.name);
 
-
-#define XML_DEBUG
-
-#ifdef XML_DEBUG
-#	define XML_WRITE_DEBUG state.doc.save_file(state.filename_xml.c_str());
-#else
-#  define XML_WRITE_DEBUG
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 /* XML writing state */
 
-struct XMLWriteState : public XMLWriter {    
+struct XMLWriteState : public XMLWriter {
 	Scene* scene;      /* Scene pointer. */	
-	xml_document doc;
-    string filename_xml;
 
 	XMLWriteState() :
 		scene(NULL)
@@ -347,6 +336,35 @@ void scene_write_xml_string(string str, xml_node node, const char* name)
 
 /* Shader */
 
+/* The graph is written after it has been finalized for rendering, and the renderer that
+ * reads the file finalizes it once more. A link that finalize generated is left out when
+ * finalize makes it again from what remains in the graph:
+ * - closure mix weights: a second pass would add the weights of a mix or add shader to the
+ *   ones already connected, doubling the closures;
+ * - the samples of a bump node and the bump made from displacement: their offset copies of
+ *   the height nodes are marked in ShaderNode::bump, which is not in the file, so read back
+ *   they would all sample the center.
+ * The generated nodes themselves stay in the file, unconnected, and the reader's graph
+ * cleanup drops them as unused. */
+static bool xml_link_is_generated(const ShaderInput *input)
+{
+	if (input->socket_type.flags & SocketType::SVM_INTERNAL) {
+		return true; /* SurfaceMixWeight, VolumeMixWeight */
+	}
+
+	const ShaderNode *node = input->parent;
+	const ustring name = input->socket_type.ui_name;
+	if (node->special_type == SHADER_SPECIAL_TYPE_BUMP &&
+		(name == "SampleCenter" || name == "SampleX" || name == "SampleY")) {
+		return true;
+	}
+	if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT && name == "Normal") {
+		return true;
+	}
+
+	return false;
+}
+
 void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node xml_root)
 {
 	//xml_node graph_node = xml_root;// .append_child(shader->type->name.c_str());
@@ -355,9 +373,6 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 	for(ShaderNode * node: shader->graph->nodes) {
 		if (node->name == "output")
 			continue; // skip
-		//if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT ||
-		//	node->special_type == SHADER_SPECIAL_TYPE_GEOMETRY)
-		//  continue;
 
 		//xml_node xml_node = xml_root.append_child(node->type->name.c_str());
 		xml_node xnode = xml_write_node(state, node, xml_root);
@@ -378,10 +393,8 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 
 				//ustring xml_socket_name(attr_name.value());
 
-				if (attr_name && ustring(attr_name.value()) == "filename" || 
-					attr_name_ui && ustring(attr_name_ui.value()) == "Filename") {
-					//std::string str_filename(attr.value());
-					//if (!str_filename.empty()) {
+			if ((attr_name && ustring(attr_name.value()) == "filename") || 
+				(attr_name_ui && ustring(attr_name_ui.value()) == "Filename")) {
 
 					xml_node_socket_found = xml_node_socket;
 					attr_name_found = attr_name;
@@ -521,7 +534,8 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 				ADD_ATTR(width);
 				ADD_ATTR(height);
 				//ADD_ATTR(depth);
-				ADD_ATTR(type);
+				/* By name, which is how the reader parses it (READ_ATTR_ENUM). */
+				ADD_ATTR_ENUM(type);
 
 				///* Optional color space, defaults to raw. */
 				//ustring colorspace;
@@ -544,6 +558,10 @@ void scene_write_xml_shader_graph(XMLWriteState& state, Shader* shader, xml_node
 	for(ShaderNode * node: shader->graph->nodes) {
 		for(ShaderOutput * output: node->outputs) {
 			for(ShaderInput * input: output->links) {
+				if (xml_link_is_generated(input)) {
+					continue;
+				}
+
 				xml_node connect_node = xml_root.append_child("connect");
 
 				xml_attribute attr_from_node = connect_node.append_attribute("from_node");
@@ -811,6 +829,11 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 		xml_attribute attr_gt = xml_node_geom.append_attribute("geometry_type");
 		attr_gt = geom->geometry_type;
 
+		/* Geometry with a single user has the object transform already in its vertices. The
+		 * object still carries the matrix, so the reader must not apply it a second time. */
+		xml_node_geom.append_attribute("transform_applied") = geom->transform_applied;
+		xml_node_geom.append_attribute("transform_negative_scaled") = geom->transform_negative_scaled;
+
 		if (geom->attributes.attributes.size() > 0) {
 			//AttributeSet attributes;
 			//xml_node node_attributes = xml_node_geom.append_child("attributes");
@@ -838,6 +861,9 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 
 				//uint flags;
 				ADD_ATTR(flags);
+
+				/* Element count: positions define it for the geometry, so the reader needs it. */
+				ADD_ATTR(size);
 
 				//vector<char> buffer;
 				xml_attribute attr_buffer = node_attribute.append_attribute("buffer");
@@ -883,7 +909,15 @@ void scene_write_xml_geom(XMLWriteState& state, xml_node node)
 #endif				
 				}
 				else {
-					ss << write_vector_to_binary_file(state, attr.buffer);
+					/* All motion steps in one buffer, the center step first. */
+					const size_t step_bytes = size_t(attr.size) * attr.data_sizeof();
+					vector<char> buffer(step_bytes * attr.num_motion_steps());
+					for (int step = 0; step < attr.num_motion_steps(); step++) {
+						if (step_bytes && attr.data(step)) {
+							memcpy(buffer.data() + step * step_bytes, attr.data(step), step_bytes);
+						}
+					}
+					ss << write_vector_to_binary_file(state, buffer);
 				}
 
 				attr_buffer = ss.str().c_str();
@@ -1443,10 +1477,10 @@ void scene_write_xml_scene(XMLWriteState& state, xml_node scene_node)
 
 /* Include */
 
-void scene_write_xml_include(XMLWriteState &state)
+void scene_write_xml_include(XMLWriteState &state, const string& filename_xml)
 {
 	/* open XML document */
-	//xml_document doc;
+	xml_document doc;
 	//xml_parse_result parse_result;
 
 	//string path = path_join(state.base, src);
@@ -1456,7 +1490,7 @@ void scene_write_xml_include(XMLWriteState &state)
 		//XMLReadState substate = state;
 		//substate.base = path_dirname(path);
 
-	string filename_bin = string(state.filename_xml) + string(".bin");
+	string filename_bin = string(filename_xml) + string(".bin");
 
 	// Open the file in binary write mode
 	state.file.open(filename_bin, std::ios::binary);
@@ -1465,7 +1499,7 @@ void scene_write_xml_include(XMLWriteState &state)
 		return;
 	}
 
-	xml_node cycles = state.doc.append_child("cycles");
+	xml_node cycles = doc.append_child("cycles");
 	scene_write_xml_scene(state, cycles);
 	//}
 	//else {
@@ -1474,7 +1508,7 @@ void scene_write_xml_include(XMLWriteState &state)
 	//}
 
 	// Save the XML to a file
-	state.doc.save_file(state.filename_xml.c_str());
+	doc.save_file(filename_xml.c_str());
 
 	state.file.close();
 }
@@ -1490,9 +1524,8 @@ void scene_write_xml_file(Scene* scene, const char* filepath)
 
 	state.scene = scene;
 	//std::string base = path_dirname(filepath);
-    state.filename_xml = filepath;
 
-	scene_write_xml_include(state);	
+	scene_write_xml_include(state, filepath);	
 }
 
 CCL_NAMESPACE_END

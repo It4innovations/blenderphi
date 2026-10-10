@@ -109,6 +109,8 @@ set(SRC_HEADERS
 set(LIB
   PUBLIC cycles_bvh
   PUBLIC cycles_device
+  # The XML writer uses the enum/string tables of graph/node_xml_util.cpp.
+  PUBLIC cycles_graph
   PUBLIC cycles_integrator
   PUBLIC cycles_subd
   PUBLIC cycles_util

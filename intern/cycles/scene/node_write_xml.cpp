@@ -289,7 +289,12 @@ void xml_write_node_socket(XMLWriter& writer, Node* node, xml_node xml_root, con
     if (socket.flags & SocketType::INTERNAL) {
         return;
     }
-    if (socket.default_value && node->has_default_value(socket)) {
+    /* Only arrays and node references are left out when they hold their default, which is
+     * empty in every Cycles version. Scalar values are always written: their defaults differ
+     * between versions (the camera border and viewplane went from 0 to 1), and a reader built
+     * from another version would silently fill in its own. */
+    const bool default_is_stable = socket.is_array() || socket.type == SocketType::NODE;
+    if (default_is_stable && socket.default_value && node->has_default_value(socket)) {
         return;
     }
 
@@ -371,7 +376,13 @@ void xml_write_node_socket(XMLWriter& writer, Node* node, xml_node xml_root, con
     case SocketType::POINT_ARRAY:
     case SocketType::NORMAL_ARRAY: {
         std::stringstream ss;
-        const array<float3>& value = node->get_float3_array(socket);
+        /* Stored as 16 byte float3 for compatibility with existing files. */
+        const array<packed_float3>& packed_value = node->get_float3_array(socket);
+        array<float3> value;
+        value.resize(packed_value.size());
+        for (size_t i = 0; i < packed_value.size(); i++) {
+          value[i] = make_float3(packed_value[i]);
+        }
         //for (size_t i = 0; i < value.size(); i++) {
         //  ss << string_printf(
         //      "%g %g %g %g", (double)value[i].x, (double)value[i].y, (double)value[i].z, (double)value[i].w);
@@ -429,11 +440,10 @@ void xml_write_node_socket(XMLWriter& writer, Node* node, xml_node xml_root, con
     case SocketType::TRANSFORM: {
         Transform tfm = node->get_transform(socket);
         
-        Object* ob = dynamic_cast<Object*>(node);
-        if (!ob || ob->get_geometry() && 
-            (ob->get_geometry()->is_volume()
-            || ob->get_geometry()->is_light()
-            || !ob->get_geometry()->transform_applied)) {
+        /* The object transform is written also when it is already applied to the vertices
+         * (geometry attribute transform_applied): the object keeps it for the negative scale
+         * flag and for object space texture coordinates, and so must the reader. */
+        {
             std::stringstream ss;
             for (int i = 0; i < 3; i++) {
                 if (i == 2)
