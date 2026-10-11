@@ -171,8 +171,8 @@ The viewport must stay as responsive as with the flattened materials.
   math on an image, and a Mix Shader with a procedural mask, compared with Blender's Cycles.
 * [x] [MATERIALS.md](MATERIALS.md) section 5 and the README describe the graph export.
 * [x] Full smoke matrix (`tools/run_smoke_all.sh`) on 2026-10-09 and the result tables of
-  the README regenerated: all 14 configurations pass the 14 tests, except the environment
-  and clip start tests on helide. The images of the README are still the ones of
+  the result tables (now in WINDOWS.md) regenerated: all 14 configurations pass the 14 tests, except the environment
+  and clip start tests on helide. The images of the result tables are still the ones of
   2026-10-06 (`tools/exr_to_png.py`, `tools/smoke_montage.py`).
 * [ ] The demo scene comparison leaves open: MoonRay and VisRTX in direct sunlight on Lone
   Monk (2 times too bright with the materials, right with one gray material), MoonRay on

@@ -1,6 +1,6 @@
 # ANARI rendering in Blender on macOS
 
-The [README](README.md) describes the ANARI stack as it is built and tested on Windows
+[WINDOWS.md](WINDOWS.md) describes the ANARI stack as it is built and tested on Windows
 (`F:\work\anari`). This document covers the same stack on macOS: how the sources get to the
 Mac, how each component is built there, what differs from Windows and what does not work.
 
@@ -44,7 +44,7 @@ State of 2026-10-11.
 | openmoonray-anari, XPU (Metal) | `moonray` | not built: it needs the Metal Toolchain component of Xcode, see [section 7](#7-what-does-not-work) | |
 | VisRTX | `visrtx` | not possible: it needs CUDA and OptiX | |
 
-There is no CUDA, OptiX or HIP on macOS, so the GPU configurations of the README
+There is no CUDA, OptiX or HIP on macOS, so the GPU configurations of WINDOWS.md
 (`cycles` with OptiX, `visionaray_cuda`, Photon with Kokkos Cuda, `mitsuba` with
 `cuda_ad_rgb`, barney with OptiX) do not exist here. The GPU of the Mac is used through
 Metal: by cyclesphi-anari, by Mitsuba (`metal_ad_rgb`), and by Radeon ProRender (which does
@@ -53,8 +53,8 @@ not render correctly).
 ## 2. Workspace
 
 The workspace is `~/scratch/anari`, with the directory names of the Windows workspace.
-`~/scratch` is a symbolic link to an external disk; the scripts use the physical path
-(`/Volumes/ExtremePro/milanjaros/anari`), because CMake resolves symbolic links.
+`~/scratch` is a symbolic link to an external disk; the scripts use the physical path of
+the directory on that disk, because CMake resolves symbolic links.
 
 ```
 ~/scratch/anari/
@@ -120,17 +120,18 @@ endings). Instead:
    commits which are not pushed, uncommitted and untracked files (ignored files are left
    out). Git normalizes the line endings while it makes the patch.
 
-The script is `F:\work\anari\build\graph-scratch\mac\sync_to_mac.sh` (Git Bash):
+The script is [`tools/macos/sync_to_mac.sh`](tools/macos/sync_to_mac.sh) of this
+documentation (Git Bash; `MAC_HOST` is the ssh name of the Mac, by default the alias `mac`):
 
 ```bat
-"C:\Program Files\Git\bin\bash.exe" F:\work\anari\build\graph-scratch\mac\sync_to_mac.sh blenderphi cyclesphi-anari
-"C:\Program Files\Git\bin\bash.exe" F:\work\anari\build\graph-scratch\mac\sync_to_mac.sh all
+"C:\Program Files\Git\bin\bash.exe" F:\work\anari\blenderphi\doc\anari\tools\macos\sync_to_mac.sh blenderphi cyclesphi-anari
+"C:\Program Files\Git\bin\bash.exe" F:\work\anari\blenderphi\doc\anari\tools\macos\sync_to_mac.sh all
 ```
 
 `all` is ANARI-SDK, blenderphi, cyclesphi-anari, barney, visionaray, anari-visionaray,
 anari-ospray, RadeonProRenderANARI, photon, mitsuba-anari and pynari. `--local` only makes
-the patches (in `mac\out`), `--no-apply` copies them without applying, `--scripts` only
-copies `mac\scripts` to `~/scratch/anari/scripts`.
+the patches (in `build\sync\macos` of the Windows workspace), `--no-apply` copies them without applying, `--scripts` only
+copies `tools/macos/scripts` to `~/scratch/anari/scripts`.
 
 On Windows the script only reads:
 
@@ -163,7 +164,7 @@ Git LFS files are fetched after the check-out. blenderphi has 6919 of them (886 
 `projects.blender.org/blender/blender.git`, as `make update` does it. The first sync of
 blenderphi therefore takes about 20 minutes, later ones seconds.
 
-`mac\mac.sh '<command>'` runs a command on the Mac inside the workspace, with the
+[`tools/macos/mac.sh`](tools/macos/mac.sh)` '<command>'` runs a command on the Mac inside the workspace, with the
 environment of `scripts/env.sh`. Both scripts use the Windows OpenSSH client
 (`C:\Windows\System32\OpenSSH\ssh.exe`): the ssh of Git Bash has no access to the Windows
 ssh-agent.
@@ -171,7 +172,7 @@ ssh-agent.
 ## 4. Building
 
 The build scripts are in `~/scratch/anari/scripts`; the copy which is edited is
-`F:\work\anari\build\graph-scratch\mac\scripts` (every sync copies it). Each script can be
+[`tools/macos/scripts`](tools/macos/scripts) of this documentation (every sync copies it). Each script can be
 run again; it configures, builds and installs, and writes its logs to `build/logs`. All
 builds are Release builds with Ninja.
 
@@ -407,7 +408,7 @@ was written to `~/.drjit`.
 bash scripts/build_photon.sh
 ```
 
-The CPU build of the README: Kokkos 5.2.2 with the Threads and Serial back ends
+The CPU build of [WINDOWS.md](WINDOWS.md#410-photon-kokkos): Kokkos 5.2.2 with the Threads and Serial back ends
 (`install/kokkos-host`, built by the same script), and Embree as the ray tracing back end.
 The GPU build needs CUDA and OptiX. Blender's macOS libraries have Embree but no CMake
 package for it, so the script writes a minimal one (`build/embree-blender-cmake`) which
@@ -540,7 +541,7 @@ they hold `libanari_library_<name>.dylib`: `install/lib`, and the directory of e
 which is installed on its own (`install/ospray/lib`, `install/rpr/lib`,
 `install/mitsuba/lib`, `install/photon_cpu/lib`, `install/moonray/lib`).
 
-The smoke tests of [README section 6](README.md#6-smoke-tests):
+The smoke tests of [README section 4](README.md#4-smoke-tests):
 
 ```sh
 bash scripts/run_smoke.sh                 # every configuration whose library is installed
@@ -644,7 +645,7 @@ Run of 2026-10-11 (shortly after midnight) on the M4, 160×120 at 32 samples, Bl
 `2220c152b37e` with the working tree changes as of the evening of 2026-10-10.
 
 The numbers were compared with the Windows logs of 2026-10-10 (`build/logs/smoke-final-*`);
-the tables of the [README](README.md#7-test-results) are from 2026-10-09 and differ for the
+the tables of [WINDOWS.md](WINDOWS.md#6-smoke-test-results) are from 2026-10-09 and differ for the
 basic render of ospray.
 
 * **cycles (CPU):** every number is identical to Windows, also after the Metal port of the
@@ -660,7 +661,7 @@ basic render of ospray.
   basic render and the lights are within 0.001 of them.
 * **rpr (default):** the GPU through Metal, see [section 7](#7-what-does-not-work).
 * **photon (CPU):** all tests pass; within 0.01 of the Windows numbers, except `gn_volume`
-  (1.000 / 1.000 / 0.004 here, 0.999 / 1.019 / 0.055 in the README of 2026-10-09; Photon
+  (1.000 / 1.000 / 0.004 here, 0.999 / 1.019 / 0.055 in WINDOWS.md, from 2026-10-09; Photon
   changed since).
 * **mitsuba (Metal):** all tests pass, and every number which was compared (basic render,
   point and spot light, `gn_volume`) is identical to `cuda_ad_rgb` on Windows.

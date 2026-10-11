@@ -1,11 +1,11 @@
 # ANARI rendering in Blender on Linux
 
-The [README](README.md) describes the ANARI stack as it is built and tested on Windows
+[WINDOWS.md](WINDOWS.md) describes the ANARI stack as it is built and tested on Windows
 (`F:\work\anari`), and [MACOS.md](MACOS.md) the port to macOS. This document covers the
 same stack on Linux: how the sources get to the Linux machine, how each component is built
 there, what differs from Windows and what does not work.
 
-Everything here was done on one machine, `p12-turin01` of IT4Innovations: Rocky Linux 10.2
+Everything here was done on one machine, a GPU node of IT4Innovations: Rocky Linux 10.2
 (kernel 6.12, glibc 2.39), an AMD EPYC 9555 (64 cores, AVX-512), 187 GB of memory, two NVIDIA
 RTX PRO 6000 Blackwell (98 GB each, driver 610.43), no display. GCC 14.3.1, CUDA 13.3, CMake
 4.2.1 and Ninja 1.12.1.
@@ -54,8 +54,8 @@ The details of what fails are in [section 7](#7-what-does-not-work).
 
 ## 2. Workspace
 
-The workspace is `/mnt/proj3/open-30-28/milanjaros/anari` (NFS), with the directory names of
-the Windows workspace:
+The workspace is one directory on a project file system (NFS), `<workspace>` below, with
+the directory names of the Windows workspace:
 
 ```
 anari/
@@ -118,20 +118,22 @@ not pushed, uncommitted and untracked files). The tree id of the result is compa
 tree id of the Windows state: a sync which ends with `OK` is exact.
 
 The script is a generalized copy of the Mac one, with the host and the workspace as
-parameters (`LINUX_HOST`, default `p12-turin01`; `LINUX_ROOT`, default
-`/mnt/proj3/open-30-28/milanjaros/anari`). Run it in Git Bash:
+parameters (`LINUX_HOST`, the ssh name of the machine; `LINUX_ROOT`, the workspace
+directory there). Run it in Git Bash:
 
 ```bat
-"C:\Program Files\Git\bin\bash.exe" F:\work\anari\build\graph-scratch\linux\sync_to_linux.sh blenderphi cyclesphi-anari
-"C:\Program Files\Git\bin\bash.exe" F:\work\anari\build\graph-scratch\linux\sync_to_linux.sh all
+set LINUX_HOST=<ssh name of the machine>
+set LINUX_ROOT=<workspace>
+"C:\Program Files\Git\bin\bash.exe" F:\work\anari\blenderphi\doc\anari\tools\linux\sync_to_linux.sh blenderphi cyclesphi-anari
+"C:\Program Files\Git\bin\bash.exe" F:\work\anari\blenderphi\doc\anari\tools\linux\sync_to_linux.sh all
 ```
 
 `all` is ANARI-SDK, blenderphi, cyclesphi-anari, barney, VisRTX, visionaray,
 anari-visionaray, anari-ospray, RadeonProRenderANARI, photon, mitsuba-anari and pynari;
 openmoonray-anari is only sent when it is named (its nested submodules, the MoonRay forks,
 are sent with it; `external/vcpkg` is skipped). `--local` only makes the patches (in
-`linux\out`), `--no-apply` copies them without applying, `--scripts` only copies
-`linux\scripts` to `scripts/` of the workspace.
+`build\sync\linux` of the Windows workspace), `--no-apply` copies them without applying, `--scripts` only copies
+`tools/linux/scripts` to `scripts/` of the workspace.
 
 On Windows the script only reads (no fetch, no change to the index or the working tree). On
 Linux, `scripts/sync_apply.sh` makes no commits: the Windows changes show as staged changes
@@ -143,16 +145,16 @@ The first sync of blenderphi takes about 20 minutes because of its Git LFS files
 most of them from `projects.blender.org`), later ones seconds. The remotes are read over
 https, anonymously.
 
-`linux\linux.sh '<command>'` runs a command on the Linux machine inside the workspace, with
+[`tools/linux/linux.sh`](tools/linux/linux.sh)` '<command>'` runs a command on the Linux machine inside the workspace, with
 the environment of `scripts/env.sh`. Both scripts use the Windows OpenSSH client
 (`C:\Windows\System32\OpenSSH\ssh.exe`): the ssh of Git Bash has no access to the Windows
-ssh-agent. `linux\compare_smoke.py` and `linux\compare_all.py` compare smoke test logs
+ssh-agent. `tools/linux/compare_smoke.py` and `tools/linux/compare_all.py` compare smoke test logs
 fetched from the Linux machine with the Windows logs in `F:\work\anari\build\logs`.
 
 ## 4. Building
 
 The build scripts are in `scripts/` of the workspace; the copy which is edited is
-`F:\work\anari\build\graph-scratch\linux\scripts` (every sync copies it). Each script can be
+[`tools/linux/scripts`](tools/linux/scripts) of this documentation (every sync copies it). Each script can be
 run again; it configures, builds and installs, and writes its logs to `build/logs`. All
 builds are Release builds with Ninja and 32 jobs (`JOBS`).
 
@@ -182,7 +184,7 @@ builds are Release builds with Ninja and 32 jobs (`JOBS`).
 Run the scripts with `bash`; they set their own environment:
 
 ```sh
-cd /mnt/proj3/open-30-28/milanjaros/anari
+cd <workspace>
 bash scripts/fetch_tools.sh
 bash scripts/build_anari_sdk.sh
 bash scripts/fetch_blender_libs.sh
@@ -210,15 +212,14 @@ The node has GCC 14.3.1, git, Python 3.12 with its development package, and the 
 toolkit of NVIDIA's RPMs in `/usr/local/cuda-13.3`. It has no CMake, Ninja or (usable)
 git-lfs; `fetch_tools.sh` downloads the official binaries into `tools/`.
 
-* **CUDA.** `/usr/local/cuda-13.3` is used (`ANARI_CUDA_ROOT`). The environment module
-  `CUDA/12.9.1` cannot be used by a normal account: `nvcc` and `cicc` have the mode
-  `rwxr-xr--` and belong to `easybuild`, so `nvcc` fails with "Permission denied". No module
-  is loaded by default; `ANARI_MODULES` loads some if needed. Every component built here
-  compiles with CUDA 13.3; none needed CUDA 12.
-* **git-lfs.** `~/git-lfs/bin/git-lfs`, which is on the `PATH` of the account, is an aarch64
-  program (the home directory is shared with an Arm machine). `tools/bin` comes first on the
-  `PATH`, and `env.sh` passes the LFS filter settings to git through the environment
-  (`GIT_CONFIG_*`), so nothing depends on `~/.gitconfig`.
+* **CUDA.** `/usr/local/cuda-13.3` is used (`ANARI_CUDA_ROOT`). The CUDA 12 environment
+  module of the node could not be used (its compiler did not run for this account). No
+  module is loaded by default; `ANARI_MODULES` loads some if needed. Every component built
+  here compiles with CUDA 13.3; none needed CUDA 12.
+* **git-lfs.** The git-lfs found on the `PATH` was a program for another architecture.
+  `tools/bin` comes first on the `PATH`, and `env.sh` passes the LFS filter settings to git
+  through the environment (`GIT_CONFIG_*`), so nothing depends on the git configuration of
+  the account.
 * **GPU architecture.** The GPUs are Blackwell, compute capability 12.0 (`sm_120`,
   `ANARI_CUDA_ARCH=120`), which nvcc knows since CUDA 12.8. CUDA 13 no longer builds for
   anything older than Turing (`sm_75`). What each component is built for:
@@ -569,7 +570,7 @@ installed on its own (`install/ospray/lib`, `install/mitsuba/lib`, `install/rpr/
 one of `install/photon/lib` and `install/photon_cpu/lib`, and one of `install/moonray/lib`
 and `install/moonray_xpu/lib`).
 
-The smoke tests of [README section 6](README.md#6-smoke-tests):
+The smoke tests of [README section 4](README.md#4-smoke-tests):
 
 ```sh
 bash scripts/run_smoke.sh                 # every configuration whose library is installed
@@ -581,7 +582,7 @@ python3 scripts/smoke_tables.py           # the tables of section 8 from the log
 Logs are `build/logs/smoke-<configuration>.txt`, images `build/test_out/<configuration>`.
 A run which hangs is stopped after `SMOKE_TIMEOUT` seconds (3600). When Blender crashes,
 the log is kept as `smoke-<configuration>-crash.txt` and the suite is run again without the
-test which crashed. The configurations are those of the Windows README plus `cycles_cuda`
+test which crashed. The configurations are those of [WINDOWS.md](WINDOWS.md#6-smoke-test-results) plus `cycles_cuda`
 (`computeDevice=cuda`), `rpr_cpu` (`computeDevice=cpu`), `mitsuba_llvm`
 (`mitsuba.variant=llvm_ad_rgb`) and `moonray_xpu` (`moonray.executionMode=xpu` with the
 libraries of `install/moonray_xpu`).
@@ -671,13 +672,10 @@ each configuration.
 * **Audio.** With OpenAL built in, a render in background mode loaded `libpulse.so.0` and
   connected to the PulseAudio socket of the login session, although the tests pass
   `-noaudio`. systemd then started `pipewire`, `pipewire-pulse`, `wireplumber` and the D-Bus
-  broker for the user, and wireplumber wrote `~/.local/state/wireplumber/stream-properties`.
+  broker for the user, and wireplumber wrote a state file below `~/.local/state`.
   Two things prevent it now: Blender is built without OpenAL, and `env.sh` gives every
   process a runtime directory of its own (`XDG_RUNTIME_DIR=cache/xdg/runtime`), no session
   bus address and `ALSOFT_DRIVERS=null`, so the sockets of the session cannot be reached.
-  (The files `~/.config/pulse/<id>-default-sink` and `-default-source` also keep changing,
-  several times a minute while nothing of this workspace runs. They are not from this
-  node: `<id>` is not its machine id, the home directory is shared with other machines.)
 * **Core dumps.** The node hands core files to `systemd-coredump`. `env.sh` sets
   `ulimit -c 0`, so a crashing test leaves nothing outside of the workspace.
 * **strace** is not permitted on the node (`ptrace: Operation not permitted`);
@@ -685,7 +683,7 @@ each configuration.
 
 ## 8. Smoke test results
 
-Runs of 2026-10-11 on p12-turin01, 160×120 at 32 samples, Blender `2220c152b37e` with the
+Runs of 2026-10-11 on this node, 160×120 at 32 samples, Blender `2220c152b37e` with the
 working tree changes of that night (moonray and cycles (CPU) with the state of the
 morning, the others a few hours older); the GPU configurations on one RTX PRO 6000
 Blackwell.
@@ -701,10 +699,10 @@ at the same time).
 
 The numbers were compared with the Windows logs `build/logs/smoke-final-<name>.txt`. Those
 are from different days, and the exporter changed in between (normal maps, the shader graph
-materials), so the comparison is split: the metrics of the README tables, which did not
+materials), so the comparison is split: the metrics of the tables in WINDOWS.md, which did not
 change, and the rest.
 
-| Linux | Windows log | README metrics: lines, largest difference | other metrics which differ |
+| Linux | Windows log | table metrics: lines, largest difference | other metrics which differ |
 |---|---|---|---|
 | cycles | cycles, 10-11 02:36 | 22, 0.002 | - |
 | cycles_optix | cycles_optix, 10-11 02:37 | 22, 0.002 | - |
@@ -725,7 +723,7 @@ change, and the rest.
 | moonray | moonray, 10-11 02:10 | 22, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
 | moonray_xpu | moonray, 10-11 02:10 | 22, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
 
-* The metrics of the README tables agree with Windows within 0.004 for every device, except:
+* The metrics of the tables in WINDOWS.md agree with Windows within 0.004 for every device, except:
   * visionaray on the CPU, 0.017: its images are noisier, as on the Mac.
   * rpr, 0.036 in one number of the lens shift test: Windows rendered on the GPU, Linux on
     the CPU.
@@ -743,7 +741,7 @@ change, and the rest.
   logs from before the evening of 2026-10-10. They are taken to be changes of the exporter
   between the runs, not differences of the platform; the tests were not run again on
   Windows to prove it.
-* **moonray:** all 16 tests pass, as on Windows. The metrics of the README tables are
+* **moonray:** all 16 tests pass, as on Windows. The metrics of the tables in WINDOWS.md are
   within 0.012 of the Windows log of the same night (0.005 without the lens shift);
   MoonRay's images are noisier at 32 samples than the differences between the platforms.
   One printed number differs more: the procedural noise material of `test_shader_graph`

@@ -2,7 +2,8 @@
 
 This document describes how Blender shaders reach the ANARI renderers: what the exporter in
 blenderphi does with a Cycles shader graph, and how each ANARI device turns the result into
-its own shading model. It complements the [README](README.md), which covers building, usage
+its own shading model. It complements the [README](README.md) and the documents of the platforms
+([WINDOWS.md](WINDOWS.md), [LINUX.md](LINUX.md), [MACOS.md](MACOS.md)), which cover building, usage
 and test results.
 
 ANARI has no shader graphs. A material is a fixed parameter set (`matte` or
@@ -371,7 +372,7 @@ available.
   and Emission nodes, combined through mix and add shaders, as constants only. The result
   is a `principled` volume on a device that has that subtype (cyclesphi-anari) and a
   `transferFunction1D` volume with a constant color elsewhere. See the
-  [README](README.md#8-known-differences-and-limitations).
+  [README](README.md#5-known-differences-and-limitations).
 
 ### 1.8 Baked base color
 
@@ -576,7 +577,7 @@ Paths are relative to the workspace (`F:\work\anari`).
   * `physicallyBasedMDL`: `physicallyBased` implemented in MDL. It replaces the native one
     only with `VISRTX_USE_MDL_FOR_PHYSICALLY_BASED` (off by default).
 * The differences of the `default` (interactive) renderer are a renderer matter, see the
-  [README](README.md#8-known-differences-and-limitations).
+  [README](README.md#5-known-differences-and-limitations).
 
 ### mitsuba-anari
 
@@ -660,7 +661,7 @@ Paths are relative to the workspace (`F:\work\anari`).
 * `thickness <= 0` sets OSPRay's `thin`, which is why the exporter sets a thickness.
 * `specularColor` and iridescence are not read.
 * For OSPRay 3.2 the device remaps `specular`, see the
-  [README](README.md#9-changes-made-to-the-anari-devices).
+  [README](README.md#6-changes-made-to-the-anari-devices).
 
 ### RadeonProRenderANARI
 

@@ -1,0 +1,41 @@
+-- A minimal MoonRay scene for scripts/test_moonray.sh: a red DwaBaseMaterial sphere
+-- (moonshine) lit by an environment light, 320 x 240 at 16 samples per pixel.
+
+PerspectiveCamera("/Scene/camera") {
+    ["node_xform"] = translate(0, 0, 5),
+    ["focal"] = 35,
+}
+
+EnvLight("/Scene/env") {
+    ["color"] = Rgb(1, 1, 1),
+    ["intensity"] = 1.0,
+}
+
+SphereGeometry("/Scene/sphere") {
+    ["radius"] = 1.0,
+}
+
+DwaBaseMaterial("/Scene/material") {
+    ["albedo"] = Rgb(0.8, 0.2, 0.2),
+    ["roughness"] = 0.4,
+}
+
+GeometrySet("/Scene/geometries") {
+    SphereGeometry("/Scene/sphere"),
+}
+
+LightSet("/Scene/lights") {
+    EnvLight("/Scene/env"),
+}
+
+Layer("/Scene/layer") {
+    {SphereGeometry("/Scene/sphere"), "", DwaBaseMaterial("/Scene/material"), LightSet("/Scene/lights")},
+}
+
+SceneVariables {
+    ["camera"] = PerspectiveCamera("/Scene/camera"),
+    ["layer"] = Layer("/Scene/layer"),
+    ["image_width"] = 320,
+    ["image_height"] = 240,
+    ["pixel_samples"] = 4,
+}
