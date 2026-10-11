@@ -619,3 +619,7 @@ reference image. Transparent pixels are shown over a checkerboard.
 pynari, the Python binding of ANARI, runs its samples on every device of this workspace. Its
 build, the test matrix and the results on Windows are described in the pynari repository:
 [`pynari/doc/windows/README.md`](../../../pynari/doc/windows/README.md).
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks

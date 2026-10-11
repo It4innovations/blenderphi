@@ -1155,3 +1155,7 @@ although more shaders are baked now: 251 bakes in 6.9 s for Barbershop.
 
 * A material that changes between graph and flattened export gets a new material object,
   which costs a geometry update on the device.
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks

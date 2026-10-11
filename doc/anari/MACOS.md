@@ -967,3 +967,7 @@ cylinders and curves are tessellated for that). In the smoke suite this changes 
 scenes which have an emitting surface (`test_emissive_room`, the basic render, the clip
 start, the lens shift, [section 8](#8-smoke-test-results)); the pynari matrix renders the
 same images as before, with both variants.
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks

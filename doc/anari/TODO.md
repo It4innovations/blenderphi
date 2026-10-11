@@ -683,3 +683,7 @@ Open:
 * A material that falls back changes its subtype, which costs a full geometry update on
   the device (5.1). Should a fallback inside the graph subtype be possible instead, for
   example the flattened material written as a small graph?
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks

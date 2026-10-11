@@ -999,3 +999,7 @@ All of them are working tree changes on Windows, like the rest.
 The ANARI device of Blender (`intern/cycles/device/anari`), ANARI-SDK, cyclesphi-anari,
 barney, VisRTX, visionaray, anari-ospray and pynari built with GCC 14 and CUDA 13.3 without
 changes.
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks

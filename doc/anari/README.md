@@ -626,3 +626,7 @@ These came out of rendering the Cycles demo scenes, see [TODO.md](TODO.md#6-real
 * **VisRTX.** Camera `near` / `far`; `matte` bounces light.
 * **mitsuba-anari.** Camera `near` / `far` and `imageRegion`; the orthographic camera
   for frames which are not square.
+
+## Development
+
+AI agent harnesses were used for selected development, testing, and optimization tasks
