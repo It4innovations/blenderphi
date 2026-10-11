@@ -349,11 +349,18 @@ for a material with a color ramp (256 table entries).
   mirror rays only. Closed room, 16 samples, relative RMS against Cycles with 1024 samples:
   0.67 as a surface, 0.12 with the light, Cycles itself 0.14; a lamp of 0.2 m 3.4 / 0.13 /
   0.16. What remains:
-  * [ ] Cost. MoonRay samples every light at every hit: Classroom takes 192 s instead of
-    76 s with its four lights, for a noise of 0.167 instead of 0.202 (one light, the
-    daylight: 103 s and 0.173). Emitters without a map could share one light with the
-    radiance as a vertex attribute, emitters of one material one light across objects; a
-    threshold on the share of the power would leave the small ones to the surface.
+  * [ ] Cost. MoonRay samples every light at every hit: Classroom took 192 s instead of
+    76 s with four lights, for a noise of 0.167 instead of 0.202 (one light, the
+    daylight: 103 s and 0.173). An emitter with less than `moonray.minMeshLightPowerShare`
+    (0.02) of the power of all emitters gets no light now. Not done: emitters without a map
+    could share one light with the radiance as a vertex attribute, emitters of one material
+    one light across objects.
+  * [ ] Classroom gains nothing at present: the emission of its daylight planes is a sky
+    looked up by the direction of view, which no light has, so they stay surfaces (noise
+    0.203 as without lights), and the one light left, for the six ceiling lamps, costs
+    131 s against 76 s. `moonray.maxMeshLights=0` is the better setting there. The
+    light's map could be given the direction to the point which is lit as its direction of
+    view; that is a change in the MoonRay fork (`MeshLight::sampleMapShader`).
   * [ ] An edit of an emitter rebuilds the sampling structure of its light in MoonRay: about
     a second per 250 000 triangles, nothing for a lamp of a few triangles. Emitters above
     `moonray.maxMeshLightTriangles` stay surfaces.
@@ -662,11 +669,33 @@ Open:
   Classroom 5.17 / 5.60 to 1.44 / 2.38, Barcelona 1.08 / 0.31 to 1.04 / 0.07, Lone Monk
   1.98 / 1.09 to 1.37 / 0.39, Monster 0.57 / 0.97 to 0.76 / 0.56; Italian Flat 1.30 / 0.56,
   Cosmos Laundromat 1.00 / 0.07.
-* [ ] openmoonray-anari, what remains is lighting: Classroom is dominated by fireflies from
-  emissive meshes (see 5.4), the sunlit courtyard of Lone Monk is overexposed (a sun of
-  irradiance 149 from the world next to an emissive sky dome mesh; which of the two is
-  not checked). Lights and the world are not sent as graphs to MoonRay
-  (`DecayLightFilter` and `ColorRampLightFilter` could carry a Light Falloff).
+* [x] Lone Monk on MoonRay, the overexposed courtyard (1.39 / 0.40): neither the sun nor
+  the emissive sky cards. With a gray material and without the cards the world light
+  matches (sky alone 0.98 / 0.03, sun and sky 1.00 / 0.02). The cause was the specular lobe
+  on faces seen from their back side: MoonRay takes such a hit as a ray which leaves the
+  material and turns the index of refraction around, which is several times the reflection
+  (5.9 times on a floor seen from below, specular only). Many meshes of the scene have
+  faces turned the wrong way. The writer sets `thin_geometry` on every material without
+  refraction now: 1.39 / 0.40 to 1.10 / 0.12. What is left, about 7 %, is the three backdrop cards which cast no
+  shadow: Cycles still stops the rays which sample the BSDF at them, MoonRay lets all of
+  the light of the world through (1.03 / 0.09 without the cards).
+* [x] The world on MoonRay: `EnvLight` has a color and an image, no map shader and no sky
+  of its own, so the baked image stays. It is exact: a Nishita sky on a gray floor, open or
+  in a yard with walls, with 2 or 8 diffuse bounces, with and without the sun, is at 0.98 to
+  1.03 of Cycles (`build/graph-scratch/moonray/sky_probe.py`).
+* [ ] Classroom on MoonRay (1.43 / 2.38): the typical pixel is 6 % brighter (median over
+  image blocks 1.06, quartiles 0.98 and 1.19). The mean is carried by pixels brighter than
+  any pixel of Cycles: Cycles clamps indirect samples at 3.0, which includes the daylight
+  planes seen through the window glass (its brightest pixel is 2.7), MoonRay does not clamp
+  emission which a mirror or transmission ray finds (brightest pixel 58; a fifth of the
+  mean is above 2.0). With every pixel limited to 2.0 the ratio is 1.14.
+* [ ] Not started: the world as a graph (there is nothing in `EnvLight` to take one), a
+  real disk light, textures on area lights, `DecayLightFilter`. The falloff of a light
+  shader is a `ColorRampLightFilter` (5.4).
+* [ ] Seen on MoonRay, not followed up: after an edit of one instance of an instanced
+  geometry MoonRay warns "Geometry is not in the Layer" for the prototype. It did so before
+  the mesh lights (checked with the device of 2026-10-10); whether the prototype loses
+  primitive attributes then is not tested.
 * [ ] Fallbacks of the MaterialX export: Color Ramp, curves, Object Info.
 
 ## 7. Open questions
@@ -683,6 +712,68 @@ Open:
 * A material that falls back changes its subtype, which costs a full geometry update on
   the device (5.1). Should a fallback inside the graph subtype be possible instead, for
   example the flattened material written as a small graph?
+
+## 8. Left to do (state of 2026-10-11)
+
+What was started or found and not finished when the work stopped. The items of the sections
+above which are still marked `[ ]` stay open as well; this list only adds what they do not
+say.
+
+**Not verified yet**
+
+* [ ] The last changes to the MoonRay path (thin geometry for opaque materials in the rdla
+  writer, the power share threshold for mesh lights) were only checked with the node tests
+  and demo renders of the work itself. Still to do: the smoke suite on Windows with the
+  final build, the same on macOS and Linux after a sync, and the result tables of
+  [WINDOWS.md](WINDOWS.md), [LINUX.md](LINUX.md) and [MACOS.md](MACOS.md) for MoonRay.
+* [ ] Linux does not have the two fixes of mitsuba-anari from 2026-10-11 (area emitters of
+  surfaces whose instance has a transform; the light Dr.Jit shutdown, which Windows now
+  uses as well). [LINUX.md](LINUX.md) still lists `test_emissive_room` as failing for
+  Mitsuba there; sync, rebuild and rerun the suite.
+* [ ] The viewport was measured before the curve attributes, the lamp globes and the mesh
+  lights were added ([MATERIALS.md](MATERIALS.md#57-viewport)). Measure again with
+  `tests/python/anari_viewport_bench.py`, also with MoonRay and an emitting surface of many
+  triangles.
+* [ ] The demo scene tables of [MATERIALS.md](MATERIALS.md#56-what-the-smoke-test-shows) for
+  OSPRay, Visionaray, Photon and Radeon ProRender are from before the surface averages and
+  the baking of view dependent colors; only barney, VisRTX, cyclesphi-anari and MoonRay were
+  rendered again.
+* [ ] The image sheets of [WINDOWS.md](WINDOWS.md#6-smoke-test-results) are from 2026-10-06
+  and do not have the tests added since (`tools/exr_to_png.py`, `tools/smoke_montage.py`).
+
+**Open in the devices**
+
+* [ ] MoonRay: a real disk light, textures on area lights and `DecayLightFilter` were not
+  started. The world stays the baked image, which is exact; `EnvLight` cannot take a shader
+  (see 6.2). Classroom stays overexposed and is slower with mesh lights; Barbershop was not
+  rendered again.
+* [ ] MoonRay XPU on macOS needs the Metal toolchain of Xcode, which is a separate download.
+* [ ] Mitsuba emits from the front side of a surface only (`test_emissive_room` at a third
+  of Cycles); two-sided emission would need a second, turned copy of the emitting mesh.
+  `llvm_ad_rgb` renders the volume of `test_object_types` black on macOS and Linux, and
+  `scalar_rgb` crashes at the end of the suite on macOS.
+* [ ] Lights with a falloff from their node tree are only exact on cyclesphi-anari and
+  MoonRay; every other device gets the average emission (0.35 of Cycles in
+  `test_light_falloff`). The parameters `falloff.distance` / `falloff.color` which MoonRay
+  declares could be taken by other devices.
+* [ ] OSPRay crashes in the volume of `test_object_types` inside of Blender on Linux; it
+  needs an OSPRay which is built against the Embree of Blender.
+* [ ] Radeon ProRender does not render on the GPU on Linux (no kernels for the Blackwell
+  generation in SDK 3.1.7.1) and renders wrong on the GPU on macOS; on the CPU three pynari
+  samples crash.
+* [ ] cyclesphi-anari on Metal: multi-resolution, derivative and CUB grids compile and were
+  never rendered (no data in these formats), ZFP grids are not ported, and one exception in
+  the Metal pipeline compile was seen once and not reproduced.
+* [ ] barney on the Blender 5.2 splash scene and VisRTX with MaterialX on Classroom and
+  Italian Flat: see 6.2.
+
+**Housekeeping**
+
+* [ ] The working copies of the macOS and Linux scripts outside of the repository are older
+  than `tools/macos` and `tools/linux` now; use the ones of the repository only.
+* [ ] `tools/macos/scripts/smoke_tables.py`, `tools/linux/scripts/smoke_tables.py` and
+  `tools/smoke_tables.py` are three copies of one script with different configuration
+  lists.
 
 ## Development
 

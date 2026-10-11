@@ -878,6 +878,12 @@ several maps.
   direction of view (Fresnel, Layer Weight, Backfacing) is left to the surface by the
   device: a light has no direction of view. `CYCLES_ANARI_NO_EMISSION_SAMPLING=1`
   leaves the emission to the surfaces (for measuring).
+* **Back sides.** MoonRay takes a hit on the back side of a face as a ray which leaves
+  the material and turns the index of refraction around: an opaque dielectric then reflects
+  several times as much, totally beyond 44 degrees. Cycles reflects from both sides alike.
+  The writer sets `thin_geometry` on every material without refraction, which keeps the
+  index as it is. Lone Monk, whose meshes have many faces turned the wrong way, went from
+  1.39 / 0.40 to 1.10 / 0.12 with it.
 * `CYCLES_ANARI_RDLA_NO_BUMP=1` leaves the bump shader out (debugging).
 
 Node tests against Cycles (310 tests, 289 compared: 241 within 0.02, 268 within 0.05; the
@@ -976,6 +982,14 @@ Laplacian of the image, the time of the whole run):
 | Italian Flat | 1 | 1.30 / 0.56 | 1.30 / 0.56 | 0.275 to 0.274 (0.419) | 202 to 229 s |
 | Cosmos Laundromat | 3 | 0.99 / 0.09 | 1.00 / 0.09 | 0.102 to 0.076 (0.094) | 949 to 1043 s |
 
+After these rows were measured the device stopped giving lights to emitters whose
+emission depends on the direction of view (the daylight planes of Classroom, a sky looked up
+by direction) and to emitters with less than 2 % of the power of all emitters, and the
+writer set `thin_geometry` on opaque materials (below). With that: Monster 0.94 / 0.20
+(100 s, 3 lights), Classroom 1.43 / 2.38 (131 s, 1 light, noise 0.203), Lone Monk
+1.10 / 0.12 (126 s, 1 light, noise 0.107), Barcelona 1.04 / 0.07, Italian Flat 1.26 / 0.54 (232 s),
+Cosmos Laundromat 0.99 / 0.09 (985 s).
+
 The softboxes of Monster are its main lights: a quarter of the noise for a third more
 time. The lamps of Classroom matter little next to its sun and cost a shadow ray each at
 every hit; with one light (`moonray.maxMeshLights=1`, the daylight plane) it takes 103 s
@@ -1038,7 +1052,7 @@ the number of materials sent as graph, the others are flattened):
 | Photon | 1.47 / 0.95 | 0.97 / 0.11 | 0.71 / 0.50 | 0.68 / 0.62 |
 | Visionaray (CUDA) | 1.63 / 0.83 | 1.31 / 0.60 | 1.13 / 0.44 | 0.42 / 0.86 |
 | RadeonProRenderANARI (59, 13, 18, 3 graphs) | 1.54 / 2.33 | 1.25 / 0.45 | 1.21 / 0.31 | 0.16 / 0.94 |
-| openmoonray-anari (79, 23, 34, 19 graphs) | 1.27 / 2.32 | 1.04 / 0.07 | 1.39 / 0.40 | 0.92 / 0.22 |
+| openmoonray-anari (79, 23, 34, 19 graphs) | 1.43 / 2.38 | 1.04 / 0.07 | 1.10 / 0.12 | 0.94 / 0.20 |
 
 | Device | Italian Flat | Cosmos Laundromat | Barbershop |
 |---|---|---|---|
