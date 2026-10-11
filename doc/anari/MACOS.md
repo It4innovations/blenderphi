@@ -28,19 +28,19 @@ State of 2026-10-11.
 |---|---|---|---|
 | ANARI-SDK 0.17 with helide | `helide` | built | smoke tests, same results as on Windows |
 | Blender (`main-anari`) with the ANARI device | | built | runs the smoke tests |
-| cyclesphi-anari, CPU | `cycles` | built | smoke tests, 16 of 16 pass; pynari 36 of 36 |
-| cyclesphi-anari, Metal | `cycles` | built | smoke tests, 16 of 16 pass, same numbers as on the CPU; pynari 36 of 36 |
-| barney (CPU back end) | `barney` | built | smoke tests, 16 of 16 pass; pynari 36 of 36 |
-| visionaray, anari-visionaray (CPU) | `visionaray` | built | smoke tests, 16 of 16 pass; pynari 36 of 36 |
-| anari-ospray with OSPRay 3.2.0 | `ospray` | built | smoke tests, 16 of 16 pass; pynari 36 of 36 |
-| RadeonProRenderANARI, CPU | `rpr` | built, with the RPR SDK 3.1.6 | smoke tests, 16 of 16 pass; pynari 34 of 36 |
+| cyclesphi-anari, CPU | `cycles` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| cyclesphi-anari, Metal | `cycles` | built | smoke tests, 18 of 18 pass, same numbers as on the CPU; pynari 36 of 36 |
+| barney (CPU back end) | `barney` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| visionaray, anari-visionaray (CPU) | `visionaray` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| anari-ospray with OSPRay 3.2.0 | `ospray` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| RadeonProRenderANARI, CPU | `rpr` | built, with the RPR SDK 3.1.6 | smoke tests, 18 of 18 pass; pynari 34 of 36 |
 | RadeonProRenderANARI, GPU (Metal) | `rpr` | built, **renders wrong images**, see [section 7](#7-what-does-not-work) | smoke tests fail |
-| Photon (Kokkos Threads, Embree) | `photon` | built | smoke tests, 16 of 16 pass; pynari 36 of 36 |
-| mitsuba-anari, Metal (`metal_ad_rgb`) | `mitsuba` | built | smoke tests, 16 of 16 pass, same numbers as `cuda_ad_rgb` on Windows; pynari 36 of 36 |
-| mitsuba-anari, LLVM (`llvm_ad_rgb`) | `mitsuba` | built | smoke tests, 15 of 16: the volume scene renders black, see [section 7](#7-what-does-not-work); pynari 36 of 36 |
-| mitsuba-anari, `scalar_rgb` | `mitsuba` | built | the smoke suite crashes in its last test, see [section 7](#7-what-does-not-work) |
+| Photon (Kokkos Threads, Embree) | `photon` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| mitsuba-anari, Metal (`metal_ad_rgb`) | `mitsuba` | built | smoke tests, 18 of 18 pass; pynari 36 of 36 |
+| mitsuba-anari, LLVM (`llvm_ad_rgb`) | `mitsuba` | built | smoke tests, 17 of 18: the volume scene renders black, see [section 7](#7-what-does-not-work); pynari 36 of 36 |
+| mitsuba-anari, `scalar_rgb` | `mitsuba` | built | the smoke suite of 16 tests crashed in its last test, see [section 7](#7-what-does-not-work); not run again with 18 |
 | pynari | | built | sample matrix, see [section 9](#9-pynari) |
-| openmoonray-anari with MoonRay and moonshine (CPU) | `moonray` | built, on an APFS disk image ([4.10](#410-moonray-openmoonray-anari)) | smoke tests, 16 of 16 pass, same numbers as on Windows; pynari 36 of 36 |
+| openmoonray-anari with MoonRay and moonshine (CPU) | `moonray` | built, on an APFS disk image ([4.10](#410-moonray-openmoonray-anari)) | smoke tests, 18 of 18 pass, same numbers as on Windows; the mesh light tests of the device, 11 of 11; pynari 36 of 36 |
 | openmoonray-anari, XPU (Metal) | `moonray` | not built: it needs the Metal Toolchain component of Xcode, see [section 7](#7-what-does-not-work) | |
 | VisRTX | `visrtx` | not possible: it needs CUDA and OptiX | |
 
@@ -191,7 +191,7 @@ builds are Release builds with Ninja.
 | `build_llvm_c.sh` | an LLVM library with only the C API exported → `install/llvm-c/lib` |
 | `build_mitsuba_anari.sh` | mitsuba-anari with Mitsuba and Dr.Jit → `install/mitsuba/lib` |
 | `build_photon.sh` | Kokkos → `install/kokkos-host`, Photon → `install/photon_cpu/lib` |
-| `build_moonray.sh [deps] [moonray] [device] [stage]` | MoonRay, moonshine and openmoonray-anari on the APFS image → `install/moonray` |
+| `build_moonray.sh [deps] [moonray] [device] [stage] [tests]` | MoonRay, moonshine and openmoonray-anari on the APFS image → `install/moonray` |
 | `test_moonray.sh [prefix]`, `moonray_test.rdla` | a render with the standalone `moonray`, [4.10](#410-moonray-openmoonray-anari) |
 | `build_pynari.sh` | the Python environment `build/pynari-venv` and pynari → `build/pynari` |
 | `run_pynari.sh`, `run_pynari.py` | the pynari sample matrix, [section 9](#9-pynari) |
@@ -423,6 +423,7 @@ built. No source change was needed.
 ```sh
 bash scripts/build_moonray.sh                        # deps, moonray, device, stage
 bash scripts/build_moonray.sh moonray device stage   # after a sync
+bash scripts/build_moonray.sh tests                  # the mesh light tests of the device
 bash scripts/test_moonray.sh [prefix]                # a render with the standalone moonray
 ```
 
@@ -516,6 +517,20 @@ OpenImageDenoise. The versions differ in their inline namespaces (`openvdb::v9_1
 tree, or of the prefix given (`~/scratch/anari/install/moonray` for the installed
 runtime), and writes `build/test_out/moonray_standalone/moonray_test.exr`.
 
+**Tests of the device.** `build_moonray.sh tests` configures the repository once more
+with `OPENMOONRAY_ANARI_BUILD_TESTS=ON`, in a build directory of its own
+(`build/anari-device-tests` on the APFS volume), builds the device and all test programs
+and runs CTest for the tests of the mesh lights (`tests/integration/test_mesh_lights.cpp`,
+the tests `anari.mesh_lights_*`); `MOONRAY_TESTS=<regular expression>` selects others.
+CTest gives the tests the device of that build tree and the MoonRay libraries of
+`external/installs`, as `tests/CMakeLists.txt` of the repository sets it up, so they do
+not test the installed runtime in `install/moonray`. The log is
+`build/logs/moonray-tests.log`. On 2026-10-11, with openmoonray-anari `a4fa3a7` and the
+moonray fork `75116ce`, all 11 passed in 192 s (`noise`, `sides`, `reflecting`,
+`textured`, `rdla`, `spaces`, `updates`, `limit`, `visibility`, `instances`, `churn`).
+The ISPC part of the mesh light (`MeshLight.ispc`) is compiled for the target
+`neon-i32x4`. The other tests of the repository were built but not run.
+
 Source changes: one line of the device and the build script of the repository,
 [section 10](#10-source-changes-made-for-macos).
 
@@ -596,7 +611,7 @@ A run which hangs is stopped after `SMOKE_TIMEOUT` seconds (3600).
 
 * **Radeon ProRender on the GPU.** Northstar creates its Metal context and renders, but
   the images are wrong: surfaces lit by point, spot, area and sun lights come out black
-  (the environment still lights the scene), textures are missing, and 18 checks of the
+  (the environment still lights the scene), textures are missing, and 20 checks of the
   smoke suite fail. It is the same with flattened materials (`materials=physicallyBased`).
   From pynari no frame finishes at all: the first two samples ran into the timeout of
   600 s. `computeDevice=cpu` (`ANARI_RPR_COMPUTE_DEVICE=cpu`) works. The device selects
@@ -623,9 +638,18 @@ A run which hangs is stopped after `SMOKE_TIMEOUT` seconds (3600).
   Metal. All other tests of the suite pass with LLVM and agree with Metal. The cause was
   not found; whether `llvm_ad_rgb` does the same on Windows is not known, the Windows
   results are from `cuda_ad_rgb`.
-* **Mitsuba `scalar_rgb`.** The full smoke suite ends with a segmentation fault in
-  `mitsuba::PathIntegrator::sample` during `test_world_camera_ray`, the last test. The
-  variant is the slow fallback and not part of the default runs.
+* **Mitsuba, emitting surfaces emit from one side.** An emitting surface (`emissive` of
+  `physicallyBased`) becomes an area emitter of Mitsuba, which emits from the front side of
+  the surface only; Cycles emits from both. In `test_emissive_room` the lamp is a plane
+  which faces the ceiling: the room has 0.335 of the brightness of Cycles (relative
+  difference 0.900), and 0.594 (0.343) when the plane is turned to face the floor. The
+  test passes with both. Until 2026-10-11 the room was black, on Windows as well: the
+  device dropped the emitter of a surface in an instance with a transform, which is what
+  Blender sends ([section 10](#10-source-changes-made-for-macos)).
+* **Mitsuba `scalar_rgb`.** The full smoke suite ended with a segmentation fault in
+  `mitsuba::PathIntegrator::sample` during `test_world_camera_ray`, then the last of 16
+  tests. The variant is the slow fallback and not part of the default runs; it was not run
+  again with the 18 tests.
 * **MoonRay XPU (Metal).** MoonRay is built with `MOONRAY_USE_METAL=NO`, so it renders on
   the CPU only. The Metal build compiles `MetalGPUPrograms.metal` with the `metal`
   compiler of Xcode, and on macOS 26 that is a component which has to be downloaded
@@ -641,39 +665,53 @@ A run which hangs is stopped after `SMOKE_TIMEOUT` seconds (3600).
 
 ## 8. Smoke test results
 
-Run of 2026-10-11 (shortly after midnight) on the M4, 160×120 at 32 samples, Blender
-`2220c152b37e` with the working tree changes as of the evening of 2026-10-10.
+Run of 2026-10-11 (late morning) on the M4, 160×120 at 32 samples. The suite has 18 tests
+now: `test_emissive_room` (a closed room lit by an emitting surface) and
+`test_light_falloff` (an area light whose node tree fades its emission out with the
+distance) are new. Everything was built from the pushed commits of that morning, without
+local changes: blenderphi `ba0634dac1f`, cyclesphi-anari `d053b1a`, barney `93960f3`,
+visionaray `7fddca1`, anari-visionaray `d8e1838`, anari-ospray `10b2b34`,
+RadeonProRenderANARI `1293fca`, photon `449737a`, mitsuba-anari `ce95c8a` (with the
+working tree changes of that noon: the fix for emitting surfaces in instances),
+openmoonray-anari `a4fa3a7` (with the moonray fork `75116ce`).
 
-The numbers were compared with the Windows logs of 2026-10-10 (`build/logs/smoke-final-*`);
-the tables of [WINDOWS.md](WINDOWS.md#6-smoke-test-results) are from 2026-10-09 and differ for the
-basic render of ospray.
+Each configuration was compared with the Windows log of the same day
+(`build/logs/smoke-final-<name>.txt`, also 18 tests), in every number the suite prints,
+including those which are not in the tables below (the materials of `test_shader_graph`,
+the noise of `test_device_denoiser`):
 
-* **cycles (CPU):** every number is identical to Windows, also after the Metal port of the
-  kernel.
-* **cycles (Metal):** every number is the same as on the CPU, except `particle_hair`
-  (1.000 / 0.004 instead of 1.001 / 0.006).
-* **helide:** identical to Windows in all tests of the tables below. It fails
-  `test_environment_map` (both rotations) and `test_camera_clip` as on Windows: it has no
-  `hdri` light and no clip planes.
-* **barney, ospray:** within 0.003 of the Windows numbers.
-* **visionaray:** within 0.02 of Windows (its images are noisier).
-* **rpr (CPU):** all tests pass. The Windows numbers are from the GPU with RPR 3.1.7; the
-  basic render and the lights are within 0.001 of them.
-* **rpr (default):** the GPU through Metal, see [section 7](#7-what-does-not-work).
-* **photon (CPU):** all tests pass; within 0.01 of the Windows numbers, except `gn_volume`
-  (1.000 / 1.000 / 0.004 here, 0.999 / 1.019 / 0.055 in WINDOWS.md, from 2026-10-09; Photon
-  changed since).
-* **mitsuba (Metal):** all tests pass, and every number which was compared (basic render,
-  point and spot light, `gn_volume`) is identical to `cuda_ad_rgb` on Windows.
-* **mitsuba (llvm):** identical to Metal in every test except `gn_volume`, which is black,
-  and `particle_hair` (coverage 1.000 instead of 0.999).
-* **mitsuba (scalar):** crashed in the last test, so the run printed no numbers.
-* **moonray:** run later than the others, see [MoonRay](#moonray) below; it is not in the
-  tables of the other configurations.
+| macOS | Windows log, time of the run | Windows result | Agreement |
+|---|---|---|---|
+| cycles (CPU) | `smoke-final-cycles.txt`, 09:25 | 18 tests, OK | every number is identical |
+| cycles (Metal) | `smoke-final-cycles.txt`, 09:25 | 18 tests, OK | identical, except `particle_hair` (1.000 / 0.004 here, 1.001 / 0.006 on the CPU and on Windows) |
+| helide | `smoke-final-helide.txt`, 11:30 | 18 tests, FAILED (failures=4) | the same four failures; every number within 0.001 |
+| barney | `smoke-final-barney.txt`, 10:11 | 18 tests, OK | within 0.002. The device denoiser does nothing here (noise 0.068 with and without it); on Windows it halves the noise (0.034) |
+| visionaray (CPU) | `smoke-final-visionaray.txt`, 11:31 | 18 tests, OK | within 0.012 (its images are noisier) |
+| ospray | `smoke-final-ospray.txt`, 11:32 | 18 tests, OK | within 0.004 |
+| rpr (CPU) | `smoke-final-rpr.txt`, 11:38 | 18 tests, OK | within 0.002, except the lens shift (0.092 here, 0.085) and the pattern agreement of the texture mapping (1.000 here, 0.990). The Windows numbers are from the GPU with RPR 3.1.7 |
+| photon (CPU) | `smoke-final-photon_cpu.txt`, 11:39 | 18 tests, OK | within 0.003 |
+| mitsuba (llvm), mitsuba (Metal) | `smoke-final-mitsuba.txt`, 11:51 (`cuda_ad_rgb`) | 18 tests, FAILED (failures=1): `test_emissive_room`, without the fix for emitting surfaces in instances | without that fix, Metal was within 0.001 of this log in every number, with the same failure. With it, the numbers of the scenes which have an emitting surface differ from the log: the basic render (1.066 / 0.068 here, 1.050 / 0.191), the clip start (1.029 / 0.069, 1.014 / 0.187) and the lens shift (0.080, 0.181); the others are unchanged |
+| moonray | `smoke-final-moonray.txt`, 10:13 | 18 tests, OK | within 0.006 in the numbers of the tables, see [MoonRay](#moonray) below |
+
+What fails:
+
+* **helide** fails `test_environment_map` (both rotations), `test_camera_clip` and the new
+  `test_light_falloff` (the floor is 20 times brighter than in Cycles), all as on Windows.
+  It has no `hdri` light and no clip planes.
+* **mitsuba (llvm)** still renders `gn_volume` black
+  ([section 7](#7-what-does-not-work)); apart from that the two variants agree in every
+  number except `particle_hair` (coverage 1.000 with LLVM, 0.999 with Metal). Both pass
+  `test_emissive_room` since the fix of the device for emitting surfaces in instances;
+  before it the image was black, as on Windows. `scalar_rgb` was not run again.
+* **rpr (default)** is the GPU through Metal, see [section 7](#7-what-does-not-work).
+
+In `test_light_falloff` only Cycles and MoonRay take the falloff of the light (brightness
+ratios near 1); the other devices which pass get the light with its average emission and
+a brightness ratio of about 0.35, on Windows as well.
 
 ### Test status
 
-| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | mitsuba (scalar) |
+| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | moonray |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `test_background` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_basic_render` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
@@ -681,96 +719,102 @@ basic render of ospray.
 | `test_camera_clip` | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_camera_shift` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_device_denoiser` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_emissive_room` | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass |
 | `test_engine_registered` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_environment_map` | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_instancing` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_light_falloff` | pass | pass | **fail** | pass | pass | pass | **fail** | pass | pass | pass | pass | pass |
 | `test_lights` | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass |
 | `test_normal_map` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_object_types` | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | **fail** | pass | pass |
 | `test_shader_graph` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_texture` | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass |
 | `test_texture_mapping` | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass |
-| `test_world_camera_ray` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | **crash** |
-| result | 16 tests, 4.470 s, OK | 16 tests, 28.291 s, OK | 16 tests, 3.151 s, FAILED (failures=3) | 16 tests, 8.754 s, OK | 16 tests, 6.046 s, OK | 16 tests, 8.671 s, OK | 16 tests, 66.267 s, FAILED (failures=18) | 16 tests, 52.291 s, OK | 16 tests, 4.383 s, OK | 16 tests, 17.960 s, FAILED (failures=1) | 16 tests, 11.149 s, OK | did not finish (crash) |
+| `test_world_camera_ray` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| result | 18 tests, 5.245 s, OK | 18 tests, 28.338 s, OK | 18 tests, 3.846 s, FAILED (failures=4) | 18 tests, 9.813 s, OK | 18 tests, 6.751 s, OK | 18 tests, 9.592 s, OK | 18 tests, 68.603 s, FAILED (failures=20) | 18 tests, 55.448 s, OK | 18 tests, 5.313 s, OK | 18 tests, 18.826 s, FAILED (failures=1) | 18 tests, 13.206 s, OK | 18 tests, 38.097 s, OK |
 
 ### Brightness ratio and relative difference against Blender Cycles
 
 Cells are *brightness ratio / relative difference*; for texture mapping the pattern agreement, for instancing and the lens shift the relative difference.
 
-| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | mitsuba (scalar) |
+| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | moonray |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 0.518 / 0.819 | 1.010 / 0.413 | 1.133 / 0.347 | 1.023 / 0.453 | 0.219 / 0.926 | 1.043 / 0.084 | 1.018 / 0.076 | 1.050 / 0.191 | 1.050 / 0.191 | – |
-| texture mapping | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 0.497 | 1.000 | 1.000 | 1.000 | 1.000 | – |
-| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.303 / 0.469 | 1.031 / 0.049 | 1.097 / 0.117 | 0.941 / 0.169 | – | 1.064 / 0.088 | 0.999 / 0.051 | 1.111 / 0.123 | 1.111 / 0.123 | – |
-| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 4.664 / 1.665 | 1.034 / 0.499 | 1.108 / 0.582 | 0.944 / 0.074 | – | 1.021 / 0.490 | 1.011 / 0.478 | 1.123 / 0.596 | 1.123 / 0.596 | – |
-| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.389 / 0.725 | 0.966 / 0.039 | 1.021 / 0.036 | 0.875 / 0.186 | – | 0.998 / 0.036 | 0.966 / 0.039 | 1.041 / 0.046 | 1.041 / 0.046 | – |
-| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.953 / 0.065 | 0.974 / 0.044 | 0.971 / 0.034 | 1.113 / 0.113 | – | 0.971 / 0.036 | 0.974 / 0.043 | 1.043 / 0.046 | 1.043 / 0.046 | – |
-| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 2.241 / 1.666 | 0.993 / 0.021 | 0.988 / 0.047 | 0.997 / 0.040 | 0.958 / 0.104 | 0.996 / 0.012 | 0.993 / 0.031 | 0.999 / 0.005 | 0.999 / 0.005 | – |
-| environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 2.332 / 1.737 | 0.994 / 0.020 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.041 | 0.997 / 0.010 | 0.985 / 0.034 | 0.998 / 0.006 | 0.998 / 0.006 | – |
-| instancing | 0.001 | 0.001 | 0.041 | 0.021 | 0.009 | 0.039 | 0.086 | 0.002 | 0.022 | 0.008 | 0.008 | – |
-| lens shift | 0.014 | 0.014 | 0.816 | 0.457 | 0.360 | 0.437 | 0.922 | 0.092 | 0.077 | 0.181 | 0.181 | – |
-| clip start | 0.999 / 0.020 | 0.999 / 0.020 | 0.000 / 1.000 | 1.009 / 0.416 | 1.158 / 0.351 | 1.033 / 0.431 | 0.214 / 0.928 | 1.007 / 0.079 | 1.010 / 0.068 | 1.014 / 0.187 | 1.014 / 0.187 | – |
-| normal map | 1.000 / 0.001 | 1.000 / 0.001 | 2.356 / 1.201 | 1.050 / 0.052 | 1.031 / 0.034 | 1.047 / 0.047 | 0.000 / 1.000 | 1.053 / 0.051 | 1.050 / 0.052 | 1.143 / 0.695 | 1.143 / 0.695 | – |
-| world for camera rays | 1.000 / 0.004 | 1.000 / 0.004 | 1.001 / 0.318 | 0.978 / 0.053 | 0.952 / 0.116 | 0.989 / 0.099 | 0.661 / 0.746 | 0.987 / 0.029 | 0.975 / 0.078 | 0.993 / 0.019 | 0.993 / 0.019 | – |
+| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 0.518 / 0.819 | 1.010 / 0.413 | 1.133 / 0.347 | 1.023 / 0.453 | 0.219 / 0.926 | 1.043 / 0.084 | 1.018 / 0.076 | 1.066 / 0.068 | 1.066 / 0.068 | 1.051 / 0.057 |
+| texture mapping | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 0.497 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.303 / 0.469 | 1.031 / 0.049 | 1.097 / 0.117 | 0.941 / 0.169 | – | 1.064 / 0.088 | 0.999 / 0.051 | 1.111 / 0.123 | 1.111 / 0.123 | 1.086 / 0.098 |
+| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 4.664 / 1.665 | 1.034 / 0.499 | 1.108 / 0.582 | 0.944 / 0.074 | – | 1.021 / 0.490 | 1.011 / 0.478 | 1.123 / 0.596 | 1.123 / 0.596 | 1.071 / 0.075 |
+| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.389 / 0.725 | 0.966 / 0.039 | 1.021 / 0.036 | 0.875 / 0.186 | – | 0.998 / 0.036 | 0.966 / 0.039 | 1.041 / 0.046 | 1.041 / 0.046 | 1.005 / 0.007 |
+| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.953 / 0.065 | 0.974 / 0.044 | 0.971 / 0.034 | 1.113 / 0.113 | – | 0.971 / 0.036 | 0.974 / 0.043 | 1.043 / 0.046 | 1.043 / 0.046 | 1.007 / 0.008 |
+| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 2.241 / 1.666 | 0.993 / 0.021 | 0.988 / 0.047 | 0.997 / 0.040 | 0.958 / 0.104 | 0.996 / 0.012 | 0.993 / 0.031 | 0.999 / 0.005 | 0.999 / 0.005 | 0.994 / 0.017 |
+| environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 2.332 / 1.737 | 0.994 / 0.020 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.041 | 0.997 / 0.010 | 0.985 / 0.034 | 0.998 / 0.006 | 0.998 / 0.006 | 0.997 / 0.012 |
+| instancing | 0.001 | 0.001 | 0.041 | 0.021 | 0.009 | 0.039 | 0.086 | 0.002 | 0.022 | 0.008 | 0.008 | 0.007 |
+| lens shift | 0.014 | 0.014 | 0.816 | 0.457 | 0.360 | 0.437 | 0.922 | 0.092 | 0.077 | 0.080 | 0.080 | 0.043 |
+| clip start | 0.999 / 0.020 | 0.999 / 0.020 | 0.000 / 1.000 | 1.009 / 0.416 | 1.158 / 0.351 | 1.033 / 0.431 | 0.214 / 0.928 | 1.007 / 0.079 | 1.010 / 0.068 | 1.029 / 0.069 | 1.029 / 0.069 | 1.051 / 0.053 |
+| normal map | 1.000 / 0.001 | 1.000 / 0.001 | 2.356 / 1.201 | 1.050 / 0.052 | 1.031 / 0.034 | 1.047 / 0.047 | 0.000 / 1.000 | 1.053 / 0.051 | 1.050 / 0.052 | 1.143 / 0.695 | 1.143 / 0.695 | 1.051 / 0.049 |
+| world for camera rays | 1.000 / 0.004 | 1.000 / 0.004 | 1.001 / 0.318 | 0.978 / 0.053 | 0.952 / 0.116 | 0.989 / 0.099 | 0.661 / 0.746 | 0.987 / 0.029 | 0.975 / 0.078 | 0.993 / 0.019 | 0.993 / 0.019 | 0.985 / 0.034 |
+| emissive room | 1.001 / 0.006 | 1.001 / 0.006 | 0.359 / 0.935 | 0.922 / 0.051 | 1.020 / 0.016 | 0.708 / 0.443 | – | 0.345 / 0.899 | 0.933 / 0.041 | 0.335 / 0.900 | 0.335 / 0.900 | 0.981 / 0.014 |
+| light falloff | 0.999 / 0.009 | 0.999 / 0.009 | 20.061 / 4.909 | 0.347 / 0.844 | 0.355 / 0.843 | 0.315 / 0.867 | – | 0.348 / 0.843 | 0.347 / 0.843 | 0.347 / 0.844 | 0.347 / 0.844 | 1.022 / 0.027 |
 
 ### Object types
 
 Cells are *mask coverage / brightness ratio / relative difference*.
 
-| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | mitsuba (scalar) |
+| | cycles (CPU) | cycles (Metal) | helide | barney | visionaray (CPU) | ospray | rpr (default) | rpr (CPU) | photon (CPU) | mitsuba (llvm) | mitsuba (Metal) | moonray |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.026 / 0.118 | 1.000 / 1.001 / 0.023 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 0.000 / 0.978 / 0.107 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | – |
-| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.028 / 0.133 | 1.000 / 1.001 / 0.023 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 0.000 / 0.978 / 0.107 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | – |
-| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.030 / 0.102 | 1.000 / 1.003 / 0.011 | 1.000 / 1.000 / 0.008 | 1.000 / 0.993 / 0.021 | 0.000 / 0.966 / 0.129 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 1.001 / 0.008 | 1.000 / 1.001 / 0.008 | – |
-| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.036 / 0.128 | 1.000 / 1.005 / 0.016 | 0.987 / 0.999 / 0.016 | 1.000 / 0.991 / 0.029 | 0.000 / 0.959 / 0.145 | 1.000 / 1.000 / 0.004 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | – |
-| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.992 / 1.121 / 0.411 | 1.000 / 0.983 / 0.056 | 1.000 / 0.984 / 0.055 | 1.000 / 1.019 / 0.055 | 0.000 / 1.027 / 0.099 | 0.997 / 1.020 / 0.053 | 1.000 / 1.000 / 0.004 | 0.102 / 0.000 / 1.000 | 0.999 / 1.018 / 0.053 | – |
-| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.003 | 1.000 / 0.997 / 0.015 | 0.000 / 0.992 / 0.062 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | – |
-| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.004 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.008 | 0.997 / 1.001 / 0.007 | 1.000 / 0.996 / 0.016 | 0.000 / 0.984 / 0.073 | 0.997 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 1.000 / 0.995 / 0.021 | 0.999 / 0.995 / 0.022 | – |
-| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.060 / 0.184 | 1.000 / 1.009 / 0.030 | 1.000 / 1.002 / 0.017 | 0.999 / 0.991 / 0.033 | 0.000 / 0.965 / 0.112 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 1.002 / 0.022 | 1.000 / 1.002 / 0.022 | – |
-| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.009 / 0.043 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.005 | 1.000 / 0.995 / 0.021 | 0.000 / 0.983 / 0.078 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.005 | – |
-| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.022 / 0.080 | 1.000 / 1.004 / 0.016 | 1.000 / 0.999 / 0.010 | 1.000 / 0.990 / 0.038 | 0.000 / 0.958 / 0.166 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | – |
-| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.015 / 0.125 | 1.000 / 1.003 / 0.017 | 1.000 / 1.000 / 0.008 | 1.000 / 0.995 / 0.033 | 0.000 / 0.972 / 0.185 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | – |
-| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.013 / 0.119 | 1.000 / 1.002 / 0.018 | 1.000 / 1.001 / 0.011 | 1.000 / 0.996 / 0.036 | 0.000 / 0.976 / 0.176 | 1.000 / 1.002 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | – |
+| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.026 / 0.118 | 1.000 / 1.001 / 0.023 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 0.000 / 0.978 / 0.107 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.003 |
+| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.028 / 0.133 | 1.000 / 1.001 / 0.023 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 0.000 / 0.978 / 0.107 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 |
+| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.030 / 0.102 | 1.000 / 1.003 / 0.011 | 1.000 / 1.000 / 0.008 | 1.000 / 0.993 / 0.021 | 0.000 / 0.966 / 0.129 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 1.001 / 0.008 | 1.000 / 1.001 / 0.008 | 1.000 / 1.000 / 0.003 |
+| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.036 / 0.128 | 1.000 / 1.005 / 0.016 | 0.987 / 0.999 / 0.016 | 1.000 / 0.991 / 0.029 | 0.000 / 0.959 / 0.145 | 1.000 / 1.000 / 0.004 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.075 |
+| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.992 / 1.121 / 0.411 | 1.000 / 0.983 / 0.056 | 1.000 / 0.984 / 0.055 | 1.000 / 1.019 / 0.055 | 0.000 / 1.027 / 0.099 | 0.997 / 1.020 / 0.053 | 1.000 / 1.000 / 0.004 | 0.102 / 0.000 / 1.000 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.004 |
+| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.003 | 1.000 / 0.997 / 0.015 | 0.000 / 0.992 / 0.062 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.001 |
+| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.004 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.008 | 0.997 / 1.001 / 0.007 | 1.000 / 0.996 / 0.016 | 0.000 / 0.984 / 0.073 | 0.997 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 1.000 / 0.995 / 0.021 | 0.999 / 0.995 / 0.022 | 0.999 / 1.006 / 0.027 |
+| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.060 / 0.184 | 1.000 / 1.009 / 0.030 | 1.000 / 1.002 / 0.017 | 0.999 / 0.991 / 0.033 | 0.000 / 0.965 / 0.112 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 1.002 / 0.022 | 1.000 / 1.002 / 0.022 | 1.000 / 1.023 / 0.067 |
+| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.009 / 0.043 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.005 | 1.000 / 0.995 / 0.021 | 0.000 / 0.983 / 0.078 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 |
+| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.022 / 0.080 | 1.000 / 1.004 / 0.016 | 1.000 / 0.999 / 0.010 | 1.000 / 0.990 / 0.038 | 0.000 / 0.958 / 0.166 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 |
+| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.015 / 0.125 | 1.000 / 1.003 / 0.017 | 1.000 / 1.000 / 0.008 | 1.000 / 0.995 / 0.033 | 0.000 / 0.972 / 0.185 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 |
+| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.013 / 0.119 | 1.000 / 1.002 / 0.018 | 1.000 / 1.001 / 0.011 | 1.000 / 0.996 / 0.036 | 0.000 / 0.976 / 0.176 | 1.000 / 1.002 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 |
 
 ### MoonRay
 
-`bash scripts/run_smoke.sh moonray`, run of 2026-10-11 in the morning, after a new sync of
-blenderphi and openmoonray-anari (Blender `2220c152b37e` and openmoonray-anari `38eb37c`,
-each with the working tree changes of that morning). The Windows column is
-`build/logs/smoke-final-moonray.txt` of the same day. All 16 tests pass on both; the
-largest difference between the two columns is 0.005.
+The `moonray` column of the tables above next to the Windows log
+(`build/logs/smoke-final-moonray.txt` of 2026-10-11, 10:13). All 18 tests pass on both;
+the largest difference between the two columns is 0.006.
 
 | | macOS | Windows |
 |---|---|---|
-| result | 16 tests, 14.813 s, OK | 16 tests, 63.261 s, OK |
-| basic render | 1.051 / 0.059 | 1.051 / 0.058 |
+| result | 18 tests, 38.097 s, OK | 18 tests, 82.958 s, OK |
+| basic render | 1.051 / 0.057 | 1.051 / 0.058 |
 | texture mapping | 1.000 | 1.000 |
-| point light | 1.085 / 0.097 | 1.085 / 0.097 |
-| spot light | 1.069 / 0.074 | 1.071 / 0.079 |
-| area light | 1.004 / 0.007 | 1.005 / 0.007 |
+| point light | 1.086 / 0.098 | 1.086 / 0.098 |
+| spot light | 1.071 / 0.075 | 1.066 / 0.069 |
+| area light | 1.005 / 0.007 | 1.005 / 0.008 |
 | sun light | 1.007 / 0.008 | 1.007 / 0.008 |
-| environment 0 deg | 0.994 / 0.018 | 0.994 / 0.017 |
-| environment 90 deg | 0.997 / 0.011 | 0.997 / 0.011 |
-| instancing | 0.007 | 0.007 |
-| lens shift | 0.044 | 0.043 |
-| clip start | 1.051 / 0.055 | 1.051 / 0.052 |
+| environment 0 deg | 0.994 / 0.017 | 0.995 / 0.017 |
+| environment 90 deg | 0.997 / 0.012 | 0.997 / 0.012 |
+| instancing | 0.007 | 0.006 |
+| lens shift | 0.043 | 0.043 |
+| clip start | 1.051 / 0.053 | 1.051 / 0.050 |
 | normal map | 1.051 / 0.049 | 1.051 / 0.049 |
-| world for camera rays | 0.986 / 0.033 | 0.985 / 0.034 |
+| world for camera rays | 0.985 / 0.034 | 0.986 / 0.032 |
+| emissive room | 0.981 / 0.014 | 0.981 / 0.014 |
+| light falloff | 1.022 / 0.027 | 1.016 / 0.033 |
 | gn_instances | 1.000 / 0.999 / 0.003 | 1.000 / 1.000 / 0.003 |
-| gn_realized | 1.000 / 0.999 / 0.003 | 1.000 / 0.999 / 0.003 |
+| gn_realized | 1.000 / 1.000 / 0.003 | 1.000 / 0.999 / 0.003 |
 | gn_points | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 |
-| gn_curves | 1.000 / 1.022 / 0.075 | 1.000 / 1.022 / 0.076 |
-| gn_volume | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.004 |
-| particle_instances | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.001 |
+| gn_curves | 1.000 / 1.022 / 0.075 | 1.000 / 1.022 / 0.077 |
+| gn_volume | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.005 |
+| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.002 |
 | particle_hair | 0.999 / 1.006 / 0.027 | 0.999 / 1.006 / 0.027 |
-| hair_curves | 1.000 / 1.022 / 0.066 | 1.000 / 1.024 / 0.070 |
+| hair_curves | 1.000 / 1.023 / 0.067 | 1.000 / 1.024 / 0.070 |
 | text | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 |
 | bevel_curve | 1.000 / 0.999 / 0.004 | 1.000 / 0.999 / 0.004 |
 | metaball | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 |
 | subdivision | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 |
 
 The cells are those of the tables above: brightness ratio / relative difference, and
-mask coverage / brightness ratio / relative difference for the object types.
+mask coverage / brightness ratio / relative difference for the object types. One number
+outside of the tables differs more: the relative difference of the `noise_ramp` material of
+`test_shader_graph` to Cycles is 0.958 here and 1.112 on Windows.
 
 ## 9. pynari
 
@@ -832,7 +876,9 @@ The `moonray` row is from a run of its own, later on 2026-10-11 with one job
 of the Windows run of 2026-10-09 (`results-migrated-moonray.json`, also 36 of 36) within
 2 of 255 in every sample, except the two `sampler-image3d` samples
 ([section 7](#7-what-does-not-work)). The Windows run took 1153 s, of which `sample03`
-398 s; here `sample03` takes 4 s.
+398 s; here `sample03` takes 4 s. The run was repeated with the device which samples
+emitting surfaces as mesh lights (openmoonray-anari `a4fa3a7`): 36 of 36 in 92 s, and the
+mean brightness of every image is the same as before.
 
 The failures of `rpr_cpu` and the `rpr` configuration are specific to macOS (the RPR
 libraries for macOS); everything else is as on Windows.
@@ -848,6 +894,9 @@ All of them are working tree changes on Windows, like the rest.
   (`libanari.0.dylib`). Only the Windows branch installed it. Blender links
   `@rpath/libanari.0.dylib`, and the only rpath of the installed executable is that
   directory.
+* `.gitattributes`: the scripts of `doc/anari/tools/macos` keep LF line endings in a
+  Windows check-out (`text eol=lf`), like those of `tools/linux`. They are copied to the
+  Mac as they are, and bash does not run a script with CRLF line endings.
 
 The ANARI device itself (`intern/cycles/device/anari`) compiled with Apple clang without
 changes.
@@ -907,3 +956,14 @@ MoonRay, moonshine, scene_rdl2 and mcrt_denoise (the submodules of
 
 barney, Visionaray, anari-visionaray, pynari, mitsuba-anari (with Mitsuba and Dr.Jit) and
 Photon built without changes.
+
+One change of mitsuba-anari is not about macOS, but was found and verified here
+(2026-10-11): `src/scene/MitsubaSceneBuilder.cpp`. Mitsuba has no emitters in instanced
+geometry, and the device left the area emitter of an emitting surface out when the
+instance of the surface had a transform, which is the case for every object Blender
+sends. Such a surface is now left out of the shapegroup of its instance and added to the
+scene once per instance, as a triangle mesh in world space with the emitter (spheres,
+cylinders and curves are tessellated for that). In the smoke suite this changes the
+scenes which have an emitting surface (`test_emissive_room`, the basic render, the clip
+start, the lens shift, [section 8](#8-smoke-test-results)); the pynari matrix renders the
+same images as before, with both variants.

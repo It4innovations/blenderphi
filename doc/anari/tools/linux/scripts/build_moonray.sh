@@ -12,6 +12,16 @@
 #   anari_dso     the RDL2 DSOs of the device repository (dso/: AnariBumpNormalMap)
 #   device        libanari_library_moonray.so
 #
+# One more step is only done when it is named:
+#
+#   tests [regex] the test suite of the device repository (tests/), built in a tree of
+#                 its own (build/openmoonray-anari-tests, nothing is installed) and run
+#                 with ctest; the tests load the device of that tree. Without a regular
+#                 expression the ANARI integration tests are run (label `integration`),
+#                 with one the tests whose name matches, for example
+#                 `build_moonray.sh tests mesh_lights`.
+#                 Log: build/logs/moonray-ctest.log.
+#
 # As on Windows and macOS the projects are built standalone, not through the
 # openmoonray superproject (which also wants arras, hydra and USD), with Unix Makefiles
 # (the generator of upstream's Linux build; Ninja's ISPC support does not work with
@@ -57,7 +67,19 @@ DEPS="$ANARI_INSTALL/moonray-deps"
 BL="$BLENDER_LIB_DIR"
 ISPC_BIN="$ANARI_TOOLS/bin/ispc"
 
-steps=("$@")
+steps=()
+TESTS_REGEX=""
+while [ $# -gt 0 ]; do
+  steps+=("$1")
+  # `tests <regex>`: the argument after `tests` selects the tests, unless it is a step.
+  if [ "$1" = tests ] && [ $# -gt 1 ]; then
+    case "$2" in
+      scene_rdl2|mcrt_denoise|moonray|moonshine|anari_dso|device|tests) ;;
+      *) TESTS_REGEX="$2"; shift ;;
+    esac
+  fi
+  shift
+done
 [ "${#steps[@]}" = 0 ] && steps=(scene_rdl2 mcrt_denoise moonray moonshine anari_dso device)
 
 export CMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -135,6 +157,27 @@ for step in "${steps[@]}"; do
       ls -l "$PREFIX/lib/libanari_library_moonray.so"
       check_undefined "$PREFIX/lib/libanari_library_moonray.so" \
         "$PREFIX/lib" "$DEPS/lib" "$ANARI_BUILD/blender/bin/lib" "$ANARI_INSTALL/lib"
+      ;;
+    tests)
+      B="$ANARI_BUILD/openmoonray-anari$VARIANT-tests"
+      log_run "openmoonray-anari$VARIANT-tests-configure" cmake -S "$SRC" -B "$B" "${common[@]}" \
+        -Danari_DIR="$ANARI_SDK_CMAKE_DIR" \
+        -DOPENMOONRAY_ANARI_BUILD_TESTS=ON -DOPENMOONRAY_ANARI_BUILD_EXAMPLES=OFF \
+        "${gpu[@]}"
+      log_run "openmoonray-anari$VARIANT-tests-build" cmake --build "$B" --parallel "$JOBS"
+      if [ -n "$TESTS_REGEX" ]; then
+        ctest_args=(-R "$TESTS_REGEX")
+      else
+        ctest_args=(-L integration)
+      fi
+      # Each test renders with all cores, so they run one after the other. The device
+      # and the libraries of Blender it is built against come from the build tree and
+      # from build/blender/bin/lib (LD_LIBRARY_PATH above).
+      HOME="$ANARI_CACHE/home" CUDA_VISIBLE_DEVICES="${ANARI_GPU:-0}" \
+        log_run "moonray$VARIANT-ctest" ctest --test-dir "$B" "${ctest_args[@]}" \
+        --output-on-failure --timeout "${TESTS_TIMEOUT:-1800}" ||
+        { grep -E "tests passed|Failed|\\*\\*\\*" "$ANARI_LOGS/moonray$VARIANT-ctest.log" | tail -n 30; exit 1; }
+      grep -E "tests passed" "$ANARI_LOGS/moonray$VARIANT-ctest.log"
       ;;
     *)
       echo "unknown step: $step" >&2

@@ -1,55 +1,80 @@
 """Markdown tables of the metrics printed by anari_smoke_tests.py.
 
-  python smoke_tables.py <logs dir>   (reads smoke-final-<config>.txt)
+  python smoke_tables.py <logs dir> [<configuration> ...]
+                         (reads smoke-final-<configuration>.txt, as run_smoke_all.sh writes
+                          them; default: every configuration with a log)
+
+Every test which a log ran is in the status table. tools/linux and tools/macos have
+counterparts with the configurations of those platforms.
 """
 import os
 import re
 import sys
 
 logs = sys.argv[1]
+
 CONFIGS = ("cycles", "cycles_optix", "barney", "visrtx", "visrtx_quality", "mitsuba", "moonray",
            "helide", "visionaray", "visionaray_cuda", "ospray", "rpr", "photon", "photon_cpu")
-TITLES = {"cycles": "cycles (CPU)", "cycles_optix": "cycles (OptiX)", "visrtx": "visrtx (default)",
-          "visrtx_quality": "visrtx (quality)", "mitsuba": "mitsuba (cuda)",
+TITLES = {"cycles": "cycles (CPU)", "cycles_optix": "cycles (OptiX)",
+          "visrtx": "visrtx (default)", "visrtx_quality": "visrtx (quality)",
           "visionaray": "visionaray (CPU)", "visionaray_cuda": "visionaray (CUDA)",
-          "photon": "photon (CUDA)", "photon_cpu": "photon (CPU)"}
+          "photon": "photon (CUDA)", "photon_cpu": "photon (CPU)", "mitsuba": "mitsuba (cuda)"}
+if len(sys.argv) > 2:
+    CONFIGS = tuple(sys.argv[2:])
+
+
+def log_path(config):
+    return os.path.join(logs, "smoke-final-{:s}.txt".format(config))
+
+
 # Configurations without a log are left out of the tables.
-CONFIGS = tuple(c for c in CONFIGS
-                if os.path.exists(os.path.join(logs, "smoke-final-{:s}.txt".format(c))))
-TESTS = ("test_build_options", "test_engine_registered", "test_basic_render", "test_texture",
-         "test_texture_mapping", "test_lights", "test_environment_map", "test_background",
-         "test_object_types", "test_instancing")
+CONFIGS = tuple(c for c in CONFIGS if os.path.exists(log_path(c)))
 
 number = r"([0-9.]+)"
+ratio_difference = "brightness ratio " + number + ", relative difference " + number
 patterns = [
-    ("basic render", re.compile(r"Cycles mean .*brightness ratio " + number + ", relative difference " + number)),
+    ("basic render", re.compile(r"Cycles mean .*" + ratio_difference)),
     ("texture mapping", re.compile(r"texture mapping pattern agreement " + number)),
-    ("point light", re.compile(r"POINT light brightness ratio " + number + ", relative difference " + number)),
-    ("spot light", re.compile(r"SPOT light brightness ratio " + number + ", relative difference " + number)),
-    ("area light", re.compile(r"AREA light brightness ratio " + number + ", relative difference " + number)),
-    ("sun light", re.compile(r"SUN light brightness ratio " + number + ", relative difference " + number)),
-    ("environment 0 deg", re.compile(r"environment rotated 0: brightness ratio " + number + ", relative difference " + number)),
-    ("environment 90 deg", re.compile(r"environment rotated 90: brightness ratio " + number + ", relative difference " + number)),
+    ("point light", re.compile(r"POINT light " + ratio_difference)),
+    ("spot light", re.compile(r"SPOT light " + ratio_difference)),
+    ("area light", re.compile(r"AREA light " + ratio_difference)),
+    ("sun light", re.compile(r"SUN light " + ratio_difference)),
+    ("environment 0 deg", re.compile(r"environment rotated 0: " + ratio_difference)),
+    ("environment 90 deg", re.compile(r"environment rotated 90: " + ratio_difference)),
     ("instancing", re.compile(r"instancing relative difference " + number)),
+    ("lens shift", re.compile(r"lens shift relative difference " + number)),
+    ("clip start", re.compile(r"clip start " + ratio_difference)),
+    ("normal map", re.compile(r"normal map " + ratio_difference)),
+    ("world for camera rays", re.compile(r"world for camera rays: " + ratio_difference)),
+    ("emissive room", re.compile(r"emissive room " + ratio_difference)),
+    ("light falloff", re.compile(r"light falloff " + ratio_difference)),
 ]
 objects = ("gn_instances", "gn_realized", "gn_points", "gn_curves", "gn_volume",
            "particle_instances", "particle_hair", "hair_curves", "text", "bevel_curve",
            "metaball", "subdivision")
 for name in objects:
     patterns.append(("object " + name, re.compile(
-        r"object " + name + ": coverage " + number + ", brightness ratio " + number +
-        ", relative difference " + number)))
+        r"object " + name + ": coverage " + number + ", " + ratio_difference)))
 
 values = {}
-status = {}
+failed = {}
+ran = {}
+summary = {}
+tests = []
 for config in CONFIGS:
-    path = os.path.join(logs, "smoke-final-{:s}.txt".format(config))
-    if not os.path.exists(path):
-        continue
-    text = open(path, encoding="utf-8", errors="replace").read()
-    failed = set(re.findall(r"^FAIL: (test_\w+)", text, re.M)) | set(
-        re.findall(r"^ERROR: (test_\w+)", text, re.M))
-    status[config] = failed
+    text = open(log_path(config), encoding="utf-8", errors="replace").read()
+    failed[config] = set(re.findall(r"^(?:FAIL|ERROR): (test_\w+)", text, re.M))
+    ran[config] = set(re.findall(r"^(test_\w+) \(", text, re.M))
+    for test in sorted(ran[config]):
+        if test not in tests:
+            tests.append(test)
+    m = re.search(r"^Ran (\d+) tests? in ([0-9.]+)s\s+^(OK|FAILED.*)$", text, re.M)
+    if m:
+        summary[config] = "{:s} tests, {:s} s, {:s}".format(m.group(1), m.group(2), m.group(3))
+    elif "TIMEOUT" in text:
+        summary[config] = "timeout"
+    else:
+        summary[config] = "did not finish (crash)"
     for line in text.splitlines():
         if not line.startswith("ANARI "):
             continue
@@ -64,36 +89,36 @@ def header():
     return "| | " + " | ".join(names) + " |\n|---|" + "---|" * len(CONFIGS) + "\n"
 
 
+def rows(keys, label=lambda key: key):
+    lines = []
+    for key in keys:
+        cells = []
+        for config in CONFIGS:
+            v = values.get((key, config))
+            cells.append(" / ".join(v) if v else "–")
+        lines.append("| {:s} | {:s} |\n".format(label(key), " | ".join(cells)))
+    return lines
+
+
 out = ["### Test status\n\n", header()]
-for test in TESTS:
+for test in sorted(tests):
     cells = []
     for config in CONFIGS:
-        if config not in status:
+        if test not in ran[config]:
             cells.append("–")
         else:
-            cells.append("**fail**" if test in status[config] else "pass")
+            cells.append("**fail**" if test in failed[config] else "pass")
     out.append("| `{:s}` | {:s} |\n".format(test, " | ".join(cells)))
+out.append("| result | {:s} |\n".format(" | ".join(summary[c] for c in CONFIGS)))
 
 out.append("\n### Brightness ratio and relative difference against Blender Cycles\n\n")
 out.append("Cells are *brightness ratio / relative difference*; for texture mapping the pattern "
-           "agreement, for instancing the relative difference.\n\n")
+           "agreement, for instancing and the lens shift the relative difference.\n\n")
 out.append(header())
-for key, _ in patterns:
-    if key.startswith("object "):
-        continue
-    cells = []
-    for config in CONFIGS:
-        v = values.get((key, config))
-        cells.append(" / ".join(v) if v else "–")
-    out.append("| {:s} | {:s} |\n".format(key, " | ".join(cells)))
+out.extend(rows([key for key, _ in patterns if not key.startswith("object ")]))
 
 out.append("\n### Object types\n\n")
 out.append("Cells are *mask coverage / brightness ratio / relative difference*.\n\n")
 out.append(header())
-for name in objects:
-    cells = []
-    for config in CONFIGS:
-        v = values.get(("object " + name, config))
-        cells.append(" / ".join(v) if v else "–")
-    out.append("| {:s} | {:s} |\n".format(name, " | ".join(cells)))
-print("".join(out))
+out.extend(rows(["object " + name for name in objects], lambda key: key[len("object "):]))
+sys.stdout.write("".join(out))

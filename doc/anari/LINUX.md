@@ -29,26 +29,26 @@ State of 2026-10-11.
 
 | Component | ANARI library | Linux | Smoke tests in Blender | pynari samples |
 |---|---|---|---|---|
-| ANARI-SDK 0.17 with helide | `helide` | built | 16 run, the 2 known failures of helide | 36 of 36 |
+| ANARI-SDK 0.17 with helide | `helide` | built | 18 run; 3 fail, see [section 7](#7-what-does-not-work) | 36 of 36 |
 | Blender (`main-anari`) with the ANARI device | | built, headless | runs the tests | |
-| cyclesphi-anari, CPU | `cycles` | built | 16 of 16 | 36 of 36 |
-| cyclesphi-anari, OptiX | `cycles` | built | 16 of 16 | 36 of 36 |
-| cyclesphi-anari, CUDA | `cycles` | built | 16 of 16 | 36 of 36 |
-| barney (OptiX) | `barney` | built | 16 of 16 | 36 of 36 |
-| VisRTX, RTX device | `visrtx` | built | 16 of 16, `default` and `quality` renderer | 36 of 36 |
-| anari-visionaray, CPU | `visionaray` | built, with a fix | 16 of 16 | 36 of 36 |
-| anari-visionaray, CUDA | `visionaray_cuda` | built | 16 of 16 | 36 of 36 |
-| anari-ospray with OSPRay 3.2.0 | `ospray` | built | 15 of 16: **crashes** in the volume of `test_object_types` | 36 of 36 |
-| mitsuba-anari, `cuda_ad_rgb` | `mitsuba` | built, with a fix | 16 of 16 | 36 of 36 |
-| mitsuba-anari, `llvm_ad_rgb` | `mitsuba` | built | 15 of 16: the volume of `test_object_types` fails to render | 36 of 36 |
-| Photon, Kokkos Cuda with OptiX | `photon` | built, with a fix | 16 of 16 | 36 of 36 |
-| Photon, Kokkos Threads with Embree | `photon` | built, with a fix | 16 of 16 | 36 of 36 |
-| RadeonProRenderANARI, GPU | `rpr` | built; **no GPU rendering on Blackwell**, the device falls back to the CPU | 16 of 16 (on the CPU) | 33 of 36 (on the CPU) |
-| RadeonProRenderANARI, CPU | `rpr` | built | 16 of 16 | as above |
+| cyclesphi-anari, CPU | `cycles` | built | 18 of 18 | 36 of 36 |
+| cyclesphi-anari, OptiX | `cycles` | built | 18 of 18 | 36 of 36 |
+| cyclesphi-anari, CUDA | `cycles` | built | 18 of 18 | 36 of 36 |
+| barney (OptiX) | `barney` | built | 18 of 18 | 36 of 36 |
+| VisRTX, RTX device | `visrtx` | built | 18 of 18, `default` and `quality` renderer | 36 of 36 |
+| anari-visionaray, CPU | `visionaray` | built, with a fix | 18 of 18 | 36 of 36 |
+| anari-visionaray, CUDA | `visionaray_cuda` | built | 18 of 18 | 36 of 36 |
+| anari-ospray with OSPRay 3.2.0 | `ospray` | built | 17 of 18: **crashes** in the volume of `test_object_types` | 36 of 36 |
+| mitsuba-anari, `cuda_ad_rgb` | `mitsuba` | built, with a fix | 17 of 18: `test_emissive_room` fails | 36 of 36 |
+| mitsuba-anari, `llvm_ad_rgb` | `mitsuba` | built | 16 of 18: `test_emissive_room` fails, the volume of `test_object_types` is not rendered | 36 of 36 |
+| Photon, Kokkos Cuda with OptiX | `photon` | built, with a fix | 18 of 18 | 36 of 36 |
+| Photon, Kokkos Threads with Embree | `photon` | built, with a fix | 18 of 18 | 36 of 36 |
+| RadeonProRenderANARI, GPU | `rpr` | built; **no GPU rendering on Blackwell**, the device falls back to the CPU | 18 of 18 (on the CPU) | 33 of 36 (on the CPU) |
+| RadeonProRenderANARI, CPU | `rpr` | built | 18 of 18 | as above |
 | pynari | | built | | |
 | MoonRay (scene_rdl2, mcrt_denoise, moonray, moonshine) | | built, with one fix; the standalone `moonray` renders the upstream test scenes | | |
-| openmoonray-anari, CPU | `moonray` | built, with one fix | 16 of 16 | 36 of 36 |
-| openmoonray-anari, XPU (OptiX) | `moonray` | built (second build) | 16 of 16 | not run (the samples cannot select the mode) |
+| openmoonray-anari, CPU | `moonray` | built, with one fix | 18 of 18; the mesh light tests of the device 11 of 11 | 36 of 36 |
+| openmoonray-anari, XPU (OptiX) | `moonray` | built (second build) | 18 of 18; the mesh light tests of the device 11 of 11 | not run (the samples cannot select the mode) |
 
 The details of what fails are in [section 7](#7-what-does-not-work).
 
@@ -456,6 +456,7 @@ and USD), with Unix Makefiles as upstream's Linux build does; everything is inst
 | `moonshine` | the shader library: the Dwa materials and the pattern maps |
 | `anari_dso` | the RDL2 DSOs of the device repository (`dso/`: `AnariBumpNormalMap`) |
 | `device` | `libanari_library_moonray.so` → `install/moonray/lib` |
+| `tests [regex]` | only when named: the tests of the device repository, see below |
 
 Upstream targets Rocky Linux 9 and installs its dependencies with `dnf` and a dependency
 build under `building/Rocky9` (TBB 2020, OpenVDB 9, OpenImageIO 2.4, ...). Neither is used
@@ -517,6 +518,18 @@ install/moonray/bin/moonray -in openmoonray-anari/external/openmoonray/testdata/
 ```
 
 It renders upstream's `sphere.rdla`, `box.rdla` and `curves.rdla` (no NaN, not black).
+
+**The tests of the device repository** (`openmoonray-anari/tests`, CTest) are built in a
+tree of their own, `build/openmoonray-anari-tests`, and run from there; nothing is
+installed:
+
+```sh
+bash scripts/build_moonray.sh tests               # the ANARI integration tests (label `integration`)
+bash scripts/build_moonray.sh tests mesh_lights   # the tests whose name matches
+```
+
+The log is `build/logs/moonray-ctest.log`. With `MOONRAY_XPU=ON` the same is done against
+the XPU build (`build/openmoonray-anari-xpu-tests`, `moonray-xpu-ctest.log`).
 
 **XPU.** `MOONRAY_XPU=ON bash scripts/build_moonray.sh` makes a second, complete build
 with MoonRay's GPU path (`-DMOONRAY_USE_OPTIX=YES`: CUDA 13.3 and OptiX) in
@@ -660,12 +673,25 @@ each configuration.
   is compiled for instruction sets up to AVX2, OSPRay's own up to AVX-512, and on this
   CPU OSPRay's ISPC code runs its AVX-512 variant (the crash is in
   `Volume_intersect_kernel...avx512skx`), while the Windows machine only has AVX2. The
-  other 15 smoke tests pass. A fix needs an OSPRay which is built against the Embree of
+  other 17 smoke tests pass. A fix needs an OSPRay which is built against the Embree of
   Blender.
 * **Mitsuba `llvm_ad_rgb`, volumes from Blender.** The volume of `test_object_types` is
   not rendered: `render failed: jit_var_gather(): attempted to gather from an empty
   array!`. `cuda_ad_rgb` renders it, and the volumes of the pynari samples work with both
   variants. There is no Windows smoke test log of this variant to compare with.
+* **Mitsuba, `test_emissive_room`** (new on 2026-10-11): the room which is only lit by an
+  emissive mesh stays black with both variants (`the lamp does not light the room`, mean
+  0.0). There is no Windows log of the suite with this test for mitsuba, so whether this
+  is a difference of the platform is not known.
+* **helide, `test_light_falloff`** (new on 2026-10-11) fails: the floor is 20 times
+  brighter than in Cycles. helide is the minimal reference device, and there is no
+  Windows log of this test for it either.
+* **openmoonray-anari, `anari.hdri_light`.** Of the 46 ANARI integration tests of the
+  device repository, this one fails: a constant environment of radiance 1 on an albedo of
+  0.4 renders 0.4259 instead of 0.4 (the tolerance is 0.021); the value is the same in
+  every run and with the XPU build. The environment tests of the smoke suite pass
+  (brightness ratio 0.995). It was not looked into; the world and the environment light
+  of the device were being reworked when this was tested.
 * **The module `CUDA/12.9.1`** cannot be used, see [4.1](#41-tools-and-compilers).
 * **A Blender with a window** needs the X11 or Wayland and EGL development packages, which
   are not installed. The OpenGL back end is off for the same reason.
@@ -683,12 +709,11 @@ each configuration.
 
 ## 8. Smoke test results
 
-Runs of 2026-10-11 on this node, 160×120 at 32 samples, Blender `2220c152b37e` with the
-working tree changes of that night (moonray and cycles (CPU) with the state of the
-morning, the others a few hours older); the GPU configurations on one RTX PRO 6000
-Blackwell.
-The run times are only a rough guide (the pynari samples of `rpr` were running on the CPU
-at the same time).
+Run of 2026-10-11 (late morning) on this node, 160×120 at 32 samples: the suite of 18
+tests (`test_emissive_room` and `test_light_falloff` are new), Blender `ba0634dac1ff`,
+openmoonray-anari `a4fa3a77107d` with the moonray fork at `75116ce453f0` (the MeshLight
+changes), all configurations in one go, one after the other; the GPU configurations on
+one RTX PRO 6000 Blackwell.
 
 * **rpr (default)** is the device without parameters: it falls back to the CPU here, so the
   column equals **rpr (CPU)**.
@@ -697,18 +722,20 @@ at the same time).
 
 ### Comparison with Windows
 
-The numbers were compared with the Windows logs `build/logs/smoke-final-<name>.txt`. Those
-are from different days, and the exporter changed in between (normal maps, the shader graph
-materials), so the comparison is split: the metrics of the tables in WINDOWS.md, which did not
+The numbers were compared with the Windows logs `build/logs/smoke-final-<name>.txt`; the
+table says which log each row uses. Only the logs of cycles (CPU), barney and moonray are
+from the same morning and have the two new tests. The others are older, some by two
+days, and the exporter changed in between (normal maps, the shader graph materials), so
+the comparison is split: the metrics of the tables in WINDOWS.md, which did not
 change, and the rest.
 
 | Linux | Windows log | table metrics: lines, largest difference | other metrics which differ |
 |---|---|---|---|
-| cycles | cycles, 10-11 02:36 | 22, 0.002 | - |
+| cycles | cycles, 10-11 09:25 | 24, 0.002 | - |
 | cycles_optix | cycles_optix, 10-11 02:37 | 22, 0.002 | - |
 | cycles_cuda | cycles_optix, 10-11 02:37 | 22, 0.002 | device denoiser 0.030 |
 | helide | helide, 10-10 10:06 | 22, 0.000 | shader graph mix_shader 0.079 |
-| barney | barney, 10-11 01:54 | 22, 0.001 | device denoiser 0.060 |
+| barney | barney, 10-11 10:11 | 24, 0.001 | device denoiser 0.060 |
 | visrtx | visrtx, 10-10 10:02 | 22, 0.001 | shader graph mix_shader 0.523 |
 | visrtx_quality | visrtx_quality, 10-11 01:54 | 22, 0.001 | - |
 | visionaray | visionaray, 10-09 22:58 | 22, 0.017 | normal map brightness ratio, 0.663; shader graph checker 2.420; shader graph noise_ramp 1.334; shader graph mix_shader 0.505 |
@@ -720,8 +747,8 @@ change, and the rest.
 | photon_cpu | photon_cpu, 10-09 23:04 | 22, 0.051 (object gn_volume) | normal map brightness ratio, 0.643; shader graph checker 2.381; shader graph noise_ramp 1.312; shader graph mix_shader 0.523 |
 | mitsuba | mitsuba, 10-10 10:05 | 22, 0.002 | shader graph mix_shader 0.418 |
 | mitsuba_llvm | mitsuba, 10-10 10:05 | 22, 1.018 (object gn_volume) | shader graph mix_shader 0.418 |
-| moonray | moonray, 10-11 02:10 | 22, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
-| moonray_xpu | moonray, 10-11 02:10 | 22, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
+| moonray | moonray, 10-11 10:13 | 24, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
+| moonray_xpu | moonray, 10-11 10:13 | 24, 0.012 | device denoiser 0.020; shader graph noise_ramp 0.235 |
 
 * The metrics of the tables in WINDOWS.md agree with Windows within 0.004 for every device, except:
   * visionaray on the CPU, 0.017: its images are noisier, as on the Mac.
@@ -732,8 +759,9 @@ change, and the rest.
   * mitsuba (llvm): the volume which is not rendered, see
     [section 7](#7-what-does-not-work). It is compared with the Windows log of
     `cuda_ad_rgb`.
-* Where the Windows log is from the same night (cycles with OptiX, barney, visrtx with the
-  `quality` renderer, visionaray with CUDA), all other metrics agree as well, except the
+* Where the Windows log is from the same day (cycles, barney, visrtx with the `quality`
+  renderer, moonray) or the evening before (visionaray with CUDA), all other metrics agree
+  as well, apart from what is said about moonray below, and except the
   noise of the device denoiser of barney (ratio 0.50 on Windows, 0.44 here; not looked into).
   cycles with CUDA is compared with the Windows log of OptiX and has another device denoiser
   (Open Image Denoise instead of the OptiX denoiser).
@@ -741,20 +769,31 @@ change, and the rest.
   logs from before the evening of 2026-10-10. They are taken to be changes of the exporter
   between the runs, not differences of the platform; the tests were not run again on
   Windows to prove it.
-* **moonray:** all 16 tests pass, as on Windows. The metrics of the tables in WINDOWS.md are
-  within 0.012 of the Windows log of the same night (0.005 without the lens shift);
-  MoonRay's images are noisier at 32 samples than the differences between the platforms.
-  One printed number differs more: the procedural noise material of `test_shader_graph`
-  (relative difference to Cycles 1.347, Windows 1.112). Both are far from Cycles, whose
-  noise MoonRay does not reproduce; why the two platforms differ was not looked into.
+* **moonray:** all 18 tests pass, as on Windows. The metrics of the tables are within 0.012
+  of the Windows log of the same morning (0.006 without the lens shift); MoonRay's images
+  are noisier at 32 samples than the differences between the platforms. The two new
+  tests: emissive room 0.981 / 0.014 (Windows 0.981 / 0.014), light falloff 1.022 / 0.033
+  (Windows 1.016 / 0.033). One printed number differs more: the procedural noise material
+  of `test_shader_graph` (relative difference to Cycles 1.347, Windows 1.112). Both are far
+  from Cycles, whose noise MoonRay does not reproduce; why the two platforms differ was
+  not looked into.
   **moonray (XPU)** gives the same numbers as the CPU build to three decimals: XPU moves
-  the ray intersections to the GPU, the shading is the same code. It takes 260 s instead
-  of 22 s for the suite, because every render sets up the GPU first.
+  the ray intersections to the GPU, the shading is the same code. It takes 265 s instead
+  of 24 s for the suite, because every render sets up the GPU first.
+* **MoonRay's mesh lights.** The changes of the fork in `MeshLight.cc` and
+  `MeshLight.ispc` compile for the ISPC target of the Linux build (`avx2-i32x8`) in the
+  CPU and in the XPU build. The mesh light tests of the device repository
+  (`anari.mesh_lights_*`, 11 tests) pass with both builds.
+* **barney:** all 18 tests pass, as on Windows, with the numbers of the Windows log
+  (within 0.001), the two new tests included.
 * **cyclesphi-anari** with the kernel changes of the Metal port: CPU, OptiX and CUDA give
   the same metrics, within 0.002 of Windows. The Linux build never existed without those
   changes (they were part of the first sync), so there are no Linux numbers from before.
 * **helide** fails `test_environment_map` (both rotations) and `test_camera_clip` as on
-  Windows: it has no `hdri` light and no clip planes.
+  Windows: it has no `hdri` light and no clip planes. It also fails the new
+  `test_light_falloff`, and **mitsuba** the new `test_emissive_room`
+  ([section 7](#7-what-does-not-work)); the Windows logs of these two devices are older
+  than the tests.
 
 ### Test status
 
@@ -766,9 +805,11 @@ change, and the rest.
 | `test_camera_clip` | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_camera_shift` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_device_denoiser` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_emissive_room` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | **fail** | **fail** | pass | pass |
 | `test_engine_registered` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_environment_map` | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_instancing` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_light_falloff` | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_lights` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_normal_map` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_object_types` | pass | pass | pass | pass | pass | pass | pass | pass | pass | – | pass | pass | pass | pass | pass | **fail** | pass | pass |
@@ -776,7 +817,7 @@ change, and the rest.
 | `test_texture` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_texture_mapping` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_world_camera_ray` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| result | 16 tests, 6.029 s, OK | 16 tests, 52.579 s, OK | 16 tests, 12.217 s, OK | 16 tests, 36.794 s, FAILED (failures=3) | 16 tests, 34.157 s, OK | 16 tests, 8.121 s, OK | 16 tests, 8.273 s, OK | 16 tests, 6.258 s, OK | 16 tests, 4.711 s, OK | 15 tests, 116.147 s, OK | 16 tests, 88.604 s, OK | 16 tests, 87.043 s, OK | 16 tests, 6.209 s, OK | 16 tests, 20.732 s, OK | 16 tests, 13.270 s, OK | 16 tests, 34.003 s, FAILED (failures=1) | 16 tests, 22.606 s, OK | 16 tests, 256.448 s, OK |
+| result | 18 tests, 3.174 s, OK | 18 tests, 10.113 s, OK | 18 tests, 10.665 s, OK | 18 tests, 2.693 s, FAILED (failures=4) | 18 tests, 10.685 s, OK | 18 tests, 7.504 s, OK | 18 tests, 7.563 s, OK | 18 tests, 6.700 s, OK | 18 tests, 3.602 s, OK | 17 tests, 83.936 s, OK | 18 tests, 81.759 s, OK | 18 tests, 81.207 s, OK | 18 tests, 5.785 s, OK | 18 tests, 4.797 s, OK | 18 tests, 13.131 s, FAILED (failures=1) | 18 tests, 25.623 s, FAILED (failures=2) | 18 tests, 24.260 s, OK | 18 tests, 264.888 s, OK |
 
 ### Brightness ratio and relative difference against Blender Cycles
 
@@ -784,19 +825,21 @@ Cells are *brightness ratio / relative difference*; for texture mapping the patt
 
 | | cycles (CPU) | cycles (OptiX) | cycles (CUDA) | helide | barney | visrtx (default) | visrtx (quality) | visionaray (CPU) | visionaray (CUDA) | ospray | rpr (default) | rpr (CPU) | photon (CUDA) | photon (CPU) | mitsuba (cuda) | mitsuba (llvm) | moonray (CPU) | moonray (XPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| basic render | 0.999 / 0.020 | 0.999 / 0.020 | 0.999 / 0.020 | 0.518 / 0.819 | 1.011 / 0.412 | 1.011 / 0.309 | 1.043 / 0.042 | 1.135 / 0.336 | 1.134 / 0.347 | 1.024 / 0.452 | 1.043 / 0.085 | 1.043 / 0.085 | 1.018 / 0.076 | 1.018 / 0.076 | 1.050 / 0.191 | 1.050 / 0.191 | 1.050 / 0.063 | 1.050 / 0.063 |
+| basic render | 0.999 / 0.020 | 0.999 / 0.020 | 0.999 / 0.020 | 0.518 / 0.819 | 1.011 / 0.412 | 1.011 / 0.309 | 1.043 / 0.042 | 1.135 / 0.336 | 1.134 / 0.347 | 1.024 / 0.452 | 1.043 / 0.085 | 1.043 / 0.085 | 1.018 / 0.076 | 1.018 / 0.076 | 1.050 / 0.191 | 1.050 / 0.191 | 1.051 / 0.063 | 1.051 / 0.063 |
 | texture mapping | 1.000 | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 | point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.000 / 0.000 | 1.303 / 0.469 | 1.031 / 0.049 | 1.033 / 0.051 | 1.033 / 0.051 | 1.097 / 0.117 | 1.097 / 0.117 | 0.941 / 0.169 | 1.064 / 0.088 | 1.064 / 0.088 | 0.999 / 0.051 | 0.999 / 0.051 | 1.111 / 0.123 | 1.111 / 0.123 | 1.085 / 0.097 | 1.085 / 0.097 |
-| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.000 / 0.009 | 4.664 / 1.665 | 1.034 / 0.499 | 1.034 / 0.501 | 1.034 / 0.501 | 1.108 / 0.583 | 1.108 / 0.582 | 0.944 / 0.074 | 1.021 / 0.490 | 1.021 / 0.490 | 1.011 / 0.478 | 1.011 / 0.478 | 1.123 / 0.596 | 1.123 / 0.596 | 1.070 / 0.082 | 1.070 / 0.082 |
+| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.000 / 0.009 | 4.664 / 1.665 | 1.034 / 0.499 | 1.034 / 0.501 | 1.034 / 0.501 | 1.108 / 0.583 | 1.108 / 0.582 | 0.944 / 0.074 | 1.021 / 0.490 | 1.021 / 0.490 | 1.011 / 0.478 | 1.011 / 0.478 | 1.123 / 0.596 | 1.123 / 0.596 | 1.068 / 0.074 | 1.068 / 0.074 |
 | area light | 1.000 / 0.000 | 1.000 / 0.000 | 1.000 / 0.000 | 0.389 / 0.725 | 0.966 / 0.039 | 0.966 / 0.039 | 0.967 / 0.039 | 1.021 / 0.036 | 1.021 / 0.036 | 0.875 / 0.186 | 0.998 / 0.036 | 0.998 / 0.036 | 0.966 / 0.039 | 0.966 / 0.039 | 1.041 / 0.046 | 1.041 / 0.046 | 1.005 / 0.007 | 1.005 / 0.007 |
 | sun light | 1.000 / 0.001 | 1.000 / 0.001 | 1.000 / 0.001 | 0.953 / 0.065 | 0.974 / 0.044 | 0.974 / 0.043 | 0.974 / 0.043 | 0.971 / 0.034 | 0.971 / 0.034 | 1.113 / 0.113 | 0.971 / 0.036 | 0.971 / 0.036 | 0.974 / 0.043 | 0.974 / 0.043 | 1.043 / 0.046 | 1.043 / 0.046 | 1.007 / 0.008 | 1.007 / 0.008 |
 | environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 1.000 / 0.002 | 2.241 / 1.666 | 0.993 / 0.021 | 0.993 / 0.021 | 0.993 / 0.021 | 0.988 / 0.047 | 0.988 / 0.047 | 0.997 / 0.040 | 0.996 / 0.012 | 0.996 / 0.012 | 0.993 / 0.031 | 0.993 / 0.031 | 0.999 / 0.005 | 0.999 / 0.005 | 0.995 / 0.017 | 0.995 / 0.017 |
 | environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 1.000 / 0.001 | 2.332 / 1.737 | 0.994 / 0.020 | 0.994 / 0.019 | 0.994 / 0.019 | 0.989 / 0.043 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.010 | 0.997 / 0.010 | 0.985 / 0.034 | 0.985 / 0.034 | 0.998 / 0.006 | 0.998 / 0.006 | 0.996 / 0.012 | 0.996 / 0.012 |
-| instancing | 0.001 | 0.001 | 0.001 | 0.041 | 0.021 | 0.021 | 0.021 | 0.009 | 0.009 | 0.039 | 0.002 | 0.002 | 0.022 | 0.022 | 0.008 | 0.008 | 0.006 | 0.006 |
+| instancing | 0.001 | 0.001 | 0.001 | 0.041 | 0.021 | 0.021 | 0.021 | 0.009 | 0.009 | 0.039 | 0.002 | 0.002 | 0.022 | 0.022 | 0.008 | 0.008 | 0.007 | 0.007 |
 | lens shift | 0.014 | 0.014 | 0.014 | 0.816 | 0.457 | 0.305 | 0.072 | 0.359 | 0.360 | 0.437 | 0.092 | 0.092 | 0.077 | 0.077 | 0.181 | 0.181 | 0.047 | 0.047 |
-| clip start | 0.999 / 0.018 | 0.999 / 0.018 | 0.999 / 0.018 | 0.000 / 1.000 | 1.010 / 0.415 | 1.003 / 0.288 | 1.042 / 0.037 | 1.156 / 0.351 | 1.159 / 0.351 | 1.033 / 0.430 | 1.007 / 0.079 | 1.007 / 0.079 | 1.010 / 0.069 | 1.010 / 0.069 | 1.014 / 0.187 | 1.014 / 0.187 | 1.051 / 0.048 | 1.051 / 0.048 |
+| clip start | 0.999 / 0.018 | 0.999 / 0.018 | 0.999 / 0.018 | 0.000 / 1.000 | 1.010 / 0.415 | 1.003 / 0.288 | 1.042 / 0.037 | 1.156 / 0.351 | 1.159 / 0.351 | 1.033 / 0.430 | 1.007 / 0.079 | 1.007 / 0.079 | 1.010 / 0.069 | 1.010 / 0.069 | 1.014 / 0.187 | 1.014 / 0.187 | 1.051 / 0.047 | 1.051 / 0.047 |
 | normal map | 1.000 / 0.001 | 1.000 / 0.001 | 1.000 / 0.001 | 2.356 / 1.201 | 1.050 / 0.052 | 1.050 / 0.052 | 1.050 / 0.052 | 1.030 / 0.032 | 1.031 / 0.034 | 1.047 / 0.047 | 1.053 / 0.051 | 1.053 / 0.051 | 1.050 / 0.052 | 1.050 / 0.052 | 1.143 / 0.695 | 1.143 / 0.695 | 1.051 / 0.049 | 1.051 / 0.049 |
-| world for camera rays | 1.000 / 0.004 | 1.000 / 0.004 | 1.000 / 0.004 | 1.001 / 0.318 | 0.978 / 0.053 | 0.976 / 0.052 | 0.976 / 0.052 | 0.952 / 0.116 | 0.953 / 0.116 | 0.989 / 0.099 | 0.987 / 0.029 | 0.987 / 0.029 | 0.975 / 0.078 | 0.975 / 0.078 | 0.993 / 0.019 | 0.993 / 0.019 | 0.986 / 0.033 | 0.986 / 0.033 |
+| world for camera rays | 1.000 / 0.004 | 1.000 / 0.004 | 1.000 / 0.004 | 1.001 / 0.318 | 0.978 / 0.053 | 0.976 / 0.052 | 0.976 / 0.052 | 0.952 / 0.116 | 0.953 / 0.116 | 0.989 / 0.099 | 0.987 / 0.029 | 0.987 / 0.029 | 0.975 / 0.078 | 0.975 / 0.078 | 0.993 / 0.019 | 0.993 / 0.019 | 0.987 / 0.030 | 0.987 / 0.030 |
+| emissive room | 1.001 / 0.006 | 1.001 / 0.006 | 1.001 / 0.006 | 0.359 / 0.935 | 0.922 / 0.051 | 0.624 / 0.204 | 0.932 / 0.038 | 1.021 / 0.017 | 1.020 / 0.016 | 0.708 / 0.443 | 0.345 / 0.899 | 0.345 / 0.899 | 0.933 / 0.041 | 0.933 / 0.041 | – | – | 0.981 / 0.014 | 0.981 / 0.014 |
+| light falloff | 0.999 / 0.009 | 0.999 / 0.009 | 0.999 / 0.009 | 20.061 / 4.909 | 0.347 / 0.844 | 0.347 / 0.844 | 0.347 / 0.844 | 0.355 / 0.843 | 0.355 / 0.843 | 0.315 / 0.867 | 0.348 / 0.843 | 0.348 / 0.843 | 0.347 / 0.843 | 0.347 / 0.843 | 0.347 / 0.844 | 0.347 / 0.844 | 1.022 / 0.033 | 1.022 / 0.033 |
 
 ### Object types
 
@@ -804,14 +847,14 @@ Cells are *mask coverage / brightness ratio / relative difference*.
 
 | | cycles (CPU) | cycles (OptiX) | cycles (CUDA) | helide | barney | visrtx (default) | visrtx (quality) | visionaray (CPU) | visionaray (CUDA) | ospray | rpr (default) | rpr (CPU) | photon (CUDA) | photon (CPU) | mitsuba (cuda) | mitsuba (llvm) | moonray (CPU) | moonray (XPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.026 / 0.118 | 1.000 / 1.001 / 0.023 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.003 / 0.012 | 1.000 / 1.003 / 0.012 | – | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 |
+| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.026 / 0.118 | 1.000 / 1.001 / 0.023 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.003 / 0.012 | 1.000 / 1.003 / 0.012 | – | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.003 | 1.000 / 0.999 / 0.003 |
 | gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.028 / 0.133 | 1.000 / 1.001 / 0.023 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.003 / 0.012 | 1.000 / 1.003 / 0.012 | – | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 |
 | gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.030 / 0.102 | 1.000 / 1.003 / 0.011 | 1.000 / 0.989 / 0.028 | 1.000 / 0.996 / 0.010 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | – | 1.000 / 1.001 / 0.003 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 | 1.000 / 1.001 / 0.008 | 1.000 / 1.001 / 0.008 | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 |
-| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.036 / 0.128 | 1.000 / 1.005 / 0.016 | 1.000 / 0.987 / 0.035 | 1.000 / 0.997 / 0.011 | 0.987 / 0.999 / 0.016 | 0.987 / 0.999 / 0.016 | – | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.022 / 0.076 |
-| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.992 / 1.121 / 0.411 | 1.000 / 0.983 / 0.056 | 0.997 / 1.121 / 0.411 | 0.998 / 0.999 / 0.006 | 0.999 / 0.984 / 0.056 | 0.998 / 0.984 / 0.055 | – | 0.997 / 1.020 / 0.053 | 0.997 / 1.020 / 0.053 | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 | 0.999 / 1.018 / 0.053 | 0.102 / 0.000 / 1.000 | 1.000 / 1.001 / 0.004 | 1.000 / 1.001 / 0.004 |
+| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.036 / 0.128 | 1.000 / 1.005 / 0.016 | 1.000 / 0.987 / 0.035 | 1.000 / 0.997 / 0.011 | 0.987 / 0.999 / 0.016 | 0.987 / 0.999 / 0.016 | – | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.077 | 1.000 / 1.022 / 0.076 |
+| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 0.992 / 1.121 / 0.411 | 1.000 / 0.983 / 0.056 | 0.997 / 1.121 / 0.411 | 0.998 / 0.999 / 0.006 | 0.999 / 0.984 / 0.056 | 0.998 / 0.984 / 0.055 | – | 0.997 / 1.020 / 0.053 | 0.997 / 1.020 / 0.053 | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 | 0.999 / 1.018 / 0.053 | 0.102 / 0.000 / 1.000 | 1.000 / 1.001 / 0.005 | 1.000 / 1.001 / 0.005 |
 | particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.004 | 1.000 / 0.995 / 0.028 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 | – | 1.000 / 1.001 / 0.003 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 |
 | particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.008 | 0.999 / 0.990 / 0.039 | 1.000 / 0.999 / 0.007 | 1.000 / 1.001 / 0.006 | 0.997 / 1.001 / 0.007 | – | 0.999 / 1.002 / 0.005 | 0.999 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 | 0.997 / 0.995 / 0.020 | 0.997 / 0.997 / 0.015 | 0.999 / 1.006 / 0.027 | 0.999 / 1.006 / 0.027 |
-| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.060 / 0.184 | 1.000 / 1.009 / 0.030 | 1.000 / 0.986 / 0.040 | 1.000 / 1.000 / 0.019 | 1.000 / 1.002 / 0.018 | 1.000 / 1.002 / 0.017 | – | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 | 1.000 / 1.001 / 0.021 | 1.000 / 1.002 / 0.022 | 1.000 / 1.024 / 0.070 | 1.000 / 1.024 / 0.070 |
+| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.060 / 0.184 | 1.000 / 1.009 / 0.030 | 1.000 / 0.986 / 0.040 | 1.000 / 1.000 / 0.019 | 1.000 / 1.002 / 0.018 | 1.000 / 1.002 / 0.017 | – | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 | 1.000 / 1.001 / 0.021 | 1.000 / 1.002 / 0.022 | 1.000 / 1.024 / 0.071 | 1.000 / 1.024 / 0.070 |
 | text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.009 / 0.043 | 1.000 / 1.001 / 0.006 | 1.000 / 0.998 / 0.009 | 1.000 / 0.998 / 0.007 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.005 | – | 1.000 / 1.002 / 0.002 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 |
 | bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.022 / 0.080 | 1.000 / 1.004 / 0.016 | 1.000 / 0.996 / 0.011 | 1.000 / 0.997 / 0.008 | 1.000 / 1.000 / 0.011 | 1.000 / 0.999 / 0.010 | – | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 | 1.000 / 1.000 / 0.007 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 0.999 / 0.004 |
 | metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.015 / 0.125 | 1.000 / 1.003 / 0.017 | 1.000 / 0.996 / 0.016 | 1.000 / 0.998 / 0.011 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | – | 1.000 / 1.001 / 0.003 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 |
@@ -819,7 +862,8 @@ Cells are *mask coverage / brightness ratio / relative difference*.
 
 ## 9. pynari results
 
-Runs of 2026-10-10 and 2026-10-11: the matrix of
+Runs of 2026-10-10 and 2026-10-11 (moonray again after the MeshLight changes, with
+pynari `69c6d87ed4a5`): the matrix of
 [`pynari/doc/windows/README.md`](../../../pynari/doc/windows/README.md#5-results) (`cycles_cuda`
 is not part of the Windows matrix). Each cell shows whether the
 run passed (the process exited normally and wrote an image which is neither black nor flat)
@@ -839,37 +883,37 @@ configurations ran two to four jobs in parallel, next to other tests and builds.
 | camera-depth-of-field | ok 92s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 2s | ok 3s | ok 2s | ok 3s | ok 1s | ok 49s | ok 2s | ok 4s |
 | geometry-cones | ok 0s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 1s | ok 2s | ok 1s | ok 11s | ok 1s | ok 2s |
 | geometry-cones-colorPerPrim | ok 0s | ok 1s | ok 14s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 1s | ok 13s | ok 1s | ok 1s |
-| geometry-cones-colorPerVertex | ok 0s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 1s | ok 13s | ok 1s | ok 2s |
+| geometry-cones-colorPerVertex | ok 0s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 13s | ok 1s | ok 2s |
 | geometry-cylinders | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 1s | ok 11s | ok 2s | ok 2s |
 | geometry-cylinders-colorPerPrim | ok 1s | ok 1s | ok 7s | ok 3s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 1s | ok 2s | ok 1s | ok 13s | ok 1s | ok 1s |
 | geometry-cylinders-colorPerVertex | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 13s | ok 1s | ok 1s |
-| geometry-spheres-with-sampler1D | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 10s | ok 3s | ok 7s | ok 23s | ok 14s | ok 10s | ok 6s | ok 195s | ok 4s | ok 20s |
+| geometry-spheres-with-sampler1D | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 10s | ok 3s | ok 7s | ok 22s | ok 14s | ok 10s | ok 6s | ok 195s | ok 4s | ok 20s |
 | geometry-triangles-testorb-np | ok 1s | ok 1s | ok 2s | ok 2s | ok 1s | ok 7s | ok 2s | ok 2s | ok 30s | ok 10s | ok 4s | ok 3s | ok 90s | ok 2s | ok 13s |
-| interactive-bobblespheres3 | ok 2s | ok 2s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 3s | ok 2s | ok 2s | ok 2s | ok 1s | **FAIL** 24s | ok 2s | ok 3s |
-| reference-hdri | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 2s | ok 8s | ok 3s | ok 2s | ok 1s | ok 37s | ok 2s | ok 4s |
+| interactive-bobblespheres3 | ok 2s | ok 2s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 3s | ok 3s | ok 2s | ok 2s | ok 1s | **FAIL** 24s | ok 2s | ok 3s |
+| reference-hdri | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 2s | ok 9s | ok 3s | ok 2s | ok 1s | ok 37s | ok 2s | ok 4s |
 | sample-getInfo | ok 1s | ok 0s | ok 1s | ok 1s | ok 0s | ok 0s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s |
-| sample01 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 2s | ok 2s | ok 2s | ok 1s | ok 1s | ok 46s | ok 2s | ok 4s |
+| sample01 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 2s | ok 4s | ok 2s | ok 1s | ok 1s | ok 46s | ok 2s | ok 4s |
 | sample01_with_texture | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 1s | ok 4s | ok 2s | ok 1s | ok 1s | ok 42s | ok 2s | ok 3s |
-| sample02 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 3s | ok 1s | ok 4s | ok 3s | ok 2s | ok 2s | **FAIL** 23s | ok 2s | ok 4s |
-| sample03 | ok 1s | ok 1s | ok 2s | ok 3s | ok 2s | ok 6s | ok 7s | ok 31s | ok 51s | ok 10s | ok 2s | ok 15s | ok 396s | ok 7s | ok 98s |
-| sample03-isosurface | ok 1s | ok 2s | ok 2s | ok 2s | ok 1s | ok 2s | ok 2s | ok 2s | ok 14s | ok 12s | ok 2s | ok 4s | ok 415s | ok 2s | ok 20s |
-| sample04 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 4s | ok 2s | ok 3s | ok 13s | ok 4s | ok 3s | ok 2s | ok 34s | ok 4s | ok 6s |
-| sample04_pointLight | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 3s | ok 8s | ok 4s | ok 3s | ok 2s | ok 44s | ok 4s | ok 6s |
-| sample05 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 3s | ok 2s | ok 10s | ok 2s | ok 2s | ok 2s | ok 129s | ok 3s | ok 5s |
-| sample06 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 8s | ok 1s | ok 1s | ok 1s | ok 18s | ok 2s | ok 2s |
-| sample07 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 3s | ok 2s | ok 3s | ok 5s | ok 6s | ok 2s | ok 4s | ok 85s | ok 2s | ok 13s |
-| sampler-image3d | ok 4s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 24s | ok 6s | ok 1s | ok 4s | ok 410s | ok 2s | ok 28s |
-| sampler-image3d-borderColor | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 3s | ok 1s | ok 2s | ok 28s | ok 5s | ok 2s | ok 3s | ok 428s | ok 2s | ok 18s |
+| sample02 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 3s | ok 1s | ok 5s | ok 3s | ok 2s | ok 2s | **FAIL** 23s | ok 2s | ok 4s |
+| sample03 | ok 1s | ok 1s | ok 2s | ok 3s | ok 2s | ok 6s | ok 7s | ok 31s | ok 67s | ok 10s | ok 2s | ok 15s | ok 396s | ok 7s | ok 98s |
+| sample03-isosurface | ok 1s | ok 2s | ok 2s | ok 2s | ok 1s | ok 2s | ok 2s | ok 2s | ok 7s | ok 12s | ok 2s | ok 4s | ok 415s | ok 2s | ok 20s |
+| sample04 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 4s | ok 2s | ok 3s | ok 4s | ok 4s | ok 3s | ok 2s | ok 34s | ok 4s | ok 6s |
+| sample04_pointLight | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 2s | ok 3s | ok 4s | ok 4s | ok 3s | ok 2s | ok 44s | ok 4s | ok 6s |
+| sample05 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 3s | ok 2s | ok 7s | ok 2s | ok 2s | ok 2s | ok 129s | ok 3s | ok 5s |
+| sample06 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 4s | ok 1s | ok 1s | ok 1s | ok 18s | ok 2s | ok 2s |
+| sample07 | ok 1s | ok 1s | ok 1s | ok 2s | ok 1s | ok 3s | ok 2s | ok 3s | ok 9s | ok 6s | ok 2s | ok 4s | ok 85s | ok 2s | ok 13s |
+| sampler-image3d | ok 4s | ok 1s | ok 2s | ok 1s | ok 1s | ok 2s | ok 1s | ok 2s | ok 17s | ok 6s | ok 1s | ok 4s | ok 410s | ok 2s | ok 28s |
+| sampler-image3d-borderColor | ok 1s | ok 1s | ok 2s | ok 1s | ok 1s | ok 3s | ok 1s | ok 2s | ok 26s | ok 5s | ok 2s | ok 3s | ok 428s | ok 2s | ok 18s |
 | testing-release_00 | ok 1s | ok 0s | ok 7s | ok 0s | ok 0s | ok 0s | ok 0s | ok 0s | ok 1s | ok 1s | ok 1s | ok 0s | ok 1s | ok 0s | ok 0s |
 | testing-release_01 | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s |
 | testing-release_02 | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 1s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s |
 | testing-release_03 | ok 0s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s |
 | testing-release_04 | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 1s | ok 0s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s |
 | testing-release_05 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 0s | ok 0s |
-| unstructured-cellCentric | ok 1s | ok 1s | ok 9s | ok 2s | ok 2s | ok 5s | ok 2s | ok 3s | ok 2s | ok 4s | ok 3s | ok 1s | ok 42s | ok 1s | ok 2s |
+| unstructured-cellCentric | ok 1s | ok 1s | ok 9s | ok 2s | ok 2s | ok 5s | ok 2s | ok 3s | ok 8s | ok 4s | ok 3s | ok 1s | ok 42s | ok 1s | ok 2s |
 | unstructured-vertexCentric | ok 3s | ok 1s | ok 2s | ok 2s | ok 2s | ok 6s | ok 1s | ok 3s | ok 2s | ok 4s | ok 2s | ok 1s | ok 41s | ok 1s | ok 2s |
 | viewer-sample01 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 1s | ok 1s | ok 0s |
-| viewer-sample02 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | **FAIL** 31s | ok 1s | ok 1s |
+| viewer-sample02 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 2s | ok 0s | ok 0s | ok 0s | **FAIL** 31s | ok 1s | ok 1s |
 | viewer-sample05 | ok 0s | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 4s | ok 1s | ok 0s |
 | viewer-sample07 | ok 1s | ok 1s | ok 1s | ok 1s | ok 1s | ok 0s | ok 1s | ok 1s | ok 1s | ok 0s | ok 0s | ok 0s | ok 2s | ok 1s | ok 1s |
 
@@ -890,6 +934,10 @@ All of them are working tree changes on Windows, like the rest.
   and the Apple branch installed it. The installed Blender links `libanari.so.0`, and its
   only rpath is `$ORIGIN/lib`; without the change it does not start
   (`libanari.so.0 => not found`).
+
+* `.gitattributes`: `doc/anari/tools/linux/**` is checked out with LF line endings also
+  where `core.autocrlf` is on. The scripts are copied to the Linux machine byte for byte
+  and run by Git Bash; with CRLF they do not run.
 
 **anari-visionaray**
 
@@ -937,6 +985,10 @@ All of them are working tree changes on Windows, like the rest.
   the other headers. This is the only change the MoonRay forks needed: scene_rdl2,
   mcrt_denoise, moonray and moonshine otherwise compile with GCC 14 against Blender's
   libraries as they are.
+* `tests/unit/test_sincos.cpp`: the two calls are written with their namespace
+  (`openmoonray_anari::portable::sincos`). glibc declares `::sincos` and `::sincosf`
+  itself, so the unqualified calls after `using namespace` were ambiguous and the tests
+  of the device did not build on Linux.
 * `src/anari_library_moonray/backend/MoonrayScene.h`: includes
   `<scene_rdl2/render/util/AtomicFloat.h>` before its `std::atomic<float>` member (Linux;
   the macOS port extended the guard to Apple). scene_rdl2 specializes `std::atomic<float>`

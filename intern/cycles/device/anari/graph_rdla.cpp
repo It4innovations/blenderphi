@@ -4946,6 +4946,13 @@ class RdlaWriter {
         set(object, "metallic", bind_float(divide(conductor, specular)));
       }
       set(object, "refractive_index", number(lobes.ior));
+      if (!has_refraction) {
+        /* An opaque surface reflects from its back side as from its front, as in Cycles. MoonRay
+         * takes a hit on the back side as a ray which leaves the material and turns the index
+         * of refraction around: several times the reflection, total beyond 44 degrees. Meshes
+         * with faces turned the wrong way are common (Lone Monk). */
+        set(object, "thin_geometry", true);
+      }
     }
 
     if (!weight_is(lobes.w_rough, 0.0f)) {

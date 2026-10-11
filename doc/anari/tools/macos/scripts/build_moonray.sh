@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build_moonray.sh [deps] [moonray] [device] [stage] - MoonRay and openmoonray-anari.
+# build_moonray.sh [deps] [moonray] [device] [stage] [tests] - MoonRay and openmoonray-anari.
 #
 # Unlike the other components, MoonRay is not built on the exFAT volume: clang's
 # `#pragma once` fails there for headers which are reached through differently spelled
@@ -24,6 +24,9 @@
 #   moonray   scene_rdl2, mcrt_denoise, moonray and moonshine -> external/installs/openmoonray
 #   device    anari_library_moonray and its DSO
 #   stage     device and MoonRay runtime -> ~/scratch/anari/install/moonray
+# Not part of the default:
+#   tests     builds the tests of openmoonray-anari and runs those of the mesh lights
+#             (MOONRAY_TESTS=<regular expression> selects others, `.` all)
 #
 # Every step runs the scripts of openmoonray-anari (scripts/build-moonray-deps-macos.sh,
 # scripts/build-moonray-macos.sh, ...) in the copy on the APFS volume.
@@ -141,6 +144,21 @@ stage_runtime() {
   echo "staged to $STAGE: $count binaries, $(ls "$STAGE/rdl2dso" | grep -c '\.so$') DSOs"
 }
 
+# The integration tests of the device (tests/ of the repository, CTest). They are built
+# in a build directory of their own, with the device of the build tree, and run with the
+# environment CTest sets up for them (the libraries of the build tree, RDL2_DSO_PATH).
+# MOONRAY_TESTS is the regular expression of the tests to run; the default is the
+# tests of the mesh lights (tests/integration/test_mesh_lights.cpp).
+TESTS_BUILD="$SRC/build/anari-device-tests"
+run_tests() {
+  cmake -S "$SRC" -B "$TESTS_BUILD" -G "Unix Makefiles" -C "$ANARI_WS/scripts/common.cmake" \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET= \
+    -Danari_DIR="$ANARI_SDK_CMAKE_DIR" \
+    -DOPENMOONRAY_ANARI_BUILD_TESTS=ON -DOPENMOONRAY_ANARI_BUILD_EXAMPLES=OFF
+  cmake --build "$TESTS_BUILD" -j"$JOBS"
+  ctest --test-dir "$TESTS_BUILD" --output-on-failure -R "${MOONRAY_TESTS:-^anari\.mesh_lights_}"
+}
+
 steps=("$@")
 [ "${#steps[@]}" = 0 ] && steps=(deps moonray device stage)
 sync_sources
@@ -158,6 +176,9 @@ for step in "${steps[@]}"; do
       ;;
     stage)
       log_run moonray-stage stage_runtime
+      ;;
+    tests)
+      log_run moonray-tests run_tests
       ;;
     *)
       echo "unknown step: $step" >&2

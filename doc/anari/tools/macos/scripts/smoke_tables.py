@@ -43,6 +43,8 @@ patterns = [
     ("clip start", re.compile(r"clip start " + ratio_difference)),
     ("normal map", re.compile(r"normal map " + ratio_difference)),
     ("world for camera rays", re.compile(r"world for camera rays: " + ratio_difference)),
+    ("emissive room", re.compile(r"emissive room " + ratio_difference)),
+    ("light falloff", re.compile(r"light falloff " + ratio_difference)),
 ]
 objects = ("gn_instances", "gn_realized", "gn_points", "gn_curves", "gn_volume",
            "particle_instances", "particle_hair", "hair_curves", "text", "bevel_curve",

@@ -4,7 +4,8 @@
 
 For each configuration: the date of the Windows log, the largest difference of the
 metrics which the README tables show (basic render, texture mapping, lights,
-environment, instancing, object types, lens shift, clip start), and the other printed
+environment, instancing, object types, lens shift, clip start, emissive room, light
+falloff), and the other printed
 metrics which differ by more than 0.02 (shader graph, normal map, denoiser, ...). The
 Windows logs are from different days, so the second group also shows changes of the
 exporter between the runs.
@@ -29,9 +30,9 @@ PAIRS = [("cycles", "cycles"), ("cycles_optix", "cycles_optix"), ("cycles_cuda",
          ("mitsuba", "mitsuba"), ("mitsuba_llvm", "mitsuba"),
          ("moonray", "moonray"), ("moonray_xpu", "moonray")]
 TABLE = ("mean [", "texture mapping", "light brightness", "environment rotated", "instancing",
-         "object ", "lens shift", "clip start")
+         "object ", "lens shift", "clip start", "emissive room", "light falloff")
 
-print("| Linux | Windows log | README metrics: lines, largest difference | other metrics which differ |")
+print("| Linux | Windows log | table metrics: lines, largest difference | other metrics which differ |")
 print("|---|---|---|---|")
 for name, ref_name in PAIRS:
     a = os.path.join(windows, "smoke-final-{:s}.txt".format(ref_name))

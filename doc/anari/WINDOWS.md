@@ -29,7 +29,7 @@ Contents:
 | `visrtx` | OptiX (`default` and `quality` renderer) | `install/bin`; with MDL and MaterialX in `install/visrtx-mdl/bin` | pass |
 | `mitsuba` | `cuda_ad_rgb`, `llvm_ad_rgb`, `scalar_rgb` | `install/mitsuba/bin` | pass (`cuda_ad_rgb`) |
 | `moonray` | CPU, XPU | `install/moonray` | pass |
-| `helide` | CPU | `install/bin` | all but `test_environment_map` and `test_camera_clip` |
+| `helide` | CPU | `install/bin` | all but `test_environment_map`, `test_camera_clip` and `test_light_falloff` |
 | `visionaray`, `visionaray_cuda` | CPU, CUDA | `install/bin` | pass |
 | `ospray` | CPU | `install/ospray/bin` | pass |
 | `rpr` | GPU (Northstar with CUDA) | `install/rpr/bin` | pass |
@@ -498,51 +498,79 @@ python blenderphi\doc\anari\tools\smoke_tables.py build\logs
 
 ## 6. Smoke test results
 
-These are the results of the run of 2026-10-09 (the images are from 2026-10-06) with all fixes from
-[the README](README.md#6-changes-made-to-the-anari-devices) applied. They cover 160×120 images at
-32 samples per pixel on an RTX 2080 Ti and a 32-thread Xeon E5-2640 v3.
+These are the results of the runs of 2026-10-11 (the images are from 2026-10-06), with all
+fixes from [the README](README.md#6-changes-made-to-the-anari-devices) applied. They cover
+160×120 images at 32 samples per pixel on an RTX 2080 Ti and a 32-thread Xeon E5-2640 v3.
 
 * **visrtx (default)** is VisRTX's `interactive` renderer. **visrtx (quality)** is its path
   tracer, selected with the device parameter `renderer=quality`.
 * **mitsuba** uses the `cuda_ad_rgb` variant.
-* **cycles** with CPU and with OptiX give identical metrics, and so do the two builds of
+* **cycles** with CPU and with OptiX give the same metrics, and so do the two builds of
   **photon**.
 * **rpr** renders on the GPU (Northstar with CUDA).
 
-All 14 configurations pass every test, except `test_environment_map` and
-`test_camera_clip` on helide. helide is the minimal ANARI reference device: it has no
-`hdri` light and no clip planes.
+All 14 configurations pass the 18 tests, with one exception:
+
+* **helide** fails `test_environment_map`, `test_camera_clip` and `test_light_falloff`.
+  helide is the minimal ANARI reference device: it has no `hdri` light and no clip planes.
+  It has no lights either and shades every surface with its own color, so the floor of the
+  falloff test, which Cycles renders nearly black away from the light, is 20 times brighter.
+
+Mitsuba failed `test_emissive_room` at first: the device left the area emitter of an
+emitting surface out when its instance had a transform, so the room rendered black. With
+the fix in mitsuba-anari it passes, at a third of the brightness of Cycles: Mitsuba emits
+from the front side of a surface only, and the lamp of the test faces the ceiling.
+
+`test_emissive_room` and `test_light_falloff` are new (2026-10-11). In the falloff test only
+cyclesphi-anari and MoonRay take the falloff of the light from its node tree (brightness
+ratio 1.00 and 1.02); the other devices get the light with its average emission and are at
+0.35.
 
 ### Test status
 
 | | cycles (CPU) | cycles (OptiX) | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CPU) | visionaray (CUDA) | ospray | rpr | photon (CUDA) | photon (CPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `test_build_options` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| `test_engine_registered` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_background` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_basic_render` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_build_options` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_camera_clip` | pass | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass |
+| `test_camera_shift` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_device_denoiser` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_emissive_room` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_engine_registered` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_environment_map` | pass | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass |
+| `test_instancing` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_light_falloff` | pass | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass |
+| `test_lights` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_normal_map` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_object_types` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_shader_graph` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_texture` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
 | `test_texture_mapping` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| `test_lights` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| `test_environment_map` | pass | pass | pass | pass | pass | pass | pass | **fail** | pass | pass | pass | pass | pass | pass |
-| `test_background` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| `test_object_types` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
-| `test_instancing` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| `test_world_camera_ray` | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| result | 18 tests, 13.108 s, OK | 18 tests, 37.463 s, OK | 18 tests, 43.172 s, OK | 18 tests, 26.713 s, OK | 18 tests, 26.623 s, OK | 18 tests, 58.079 s, OK | 18 tests, 82.958 s, OK | 18 tests, 11.437 s, FAILED (failures=4) | 18 tests, 42.782 s, OK | 18 tests, 16.624 s, OK | 18 tests, 25.780 s, OK | 18 tests, 386.873 s, OK | 18 tests, 24.283 s, OK | 18 tests, 19.485 s, OK |
 
 ### Brightness ratio and relative difference against Blender Cycles
 
-Cells are *brightness ratio / relative difference*; for texture mapping the pattern agreement, for instancing the relative difference.
+Cells are *brightness ratio / relative difference*; for texture mapping the pattern agreement, for instancing and the lens shift the relative difference.
 
 | | cycles (CPU) | cycles (OptiX) | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CPU) | visionaray (CUDA) | ospray | rpr | photon (CUDA) | photon (CPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 1.036 / 0.412 | 1.011 / 0.308 | 1.051 / 0.048 | 1.050 / 0.191 | 1.051 / 0.058 | 0.518 / 0.819 | 1.146 / 0.338 | 1.227 / 0.776 | 1.059 / 0.057 | 1.043 / 0.084 | 1.021 / 0.081 | 1.021 / 0.081 |
+| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 1.011 / 0.413 | 1.011 / 0.308 | 1.043 / 0.042 | 1.066 / 0.068 | 1.051 / 0.058 | 0.518 / 0.819 | 1.135 / 0.335 | 1.134 / 0.347 | 1.023 / 0.454 | 1.043 / 0.084 | 1.018 / 0.076 | 1.018 / 0.076 |
 | texture mapping | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 0.990 | 1.000 | 1.000 |
-| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.040 / 0.056 | 1.033 / 0.051 | 1.033 / 0.051 | 1.111 / 0.123 | 1.087 / 0.099 | 1.303 / 0.469 | 1.097 / 0.117 | 1.097 / 0.117 | 0.941 / 0.169 | 1.063 / 0.088 | 0.999 / 0.051 | 0.999 / 0.051 |
-| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.044 / 0.511 | 1.034 / 0.501 | 1.034 / 0.501 | 1.123 / 0.596 | 1.069 / 0.074 | 4.664 / 1.665 | 1.109 / 0.584 | 1.107 / 0.582 | 0.944 / 0.074 | 1.021 / 0.490 | 1.011 / 0.478 | 1.011 / 0.478 |
-| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.975 / 0.031 | 0.966 / 0.039 | 0.967 / 0.039 | 1.041 / 0.046 | 1.005 / 0.008 | 0.389 / 0.725 | 1.022 / 0.036 | 1.022 / 0.036 | 0.875 / 0.186 | 0.998 / 0.037 | 0.966 / 0.039 | 0.966 / 0.039 |
-| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.982 / 0.037 | 0.974 / 0.043 | 0.974 / 0.043 | 1.043 / 0.046 | 1.007 / 0.008 | 0.953 / 0.065 | 0.971 / 0.034 | 0.971 / 0.034 | 1.113 / 0.113 | 0.971 / 0.036 | 0.974 / 0.043 | 0.974 / 0.043 |
-| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 0.996 / 0.014 | 0.995 / 0.017 | 0.996 / 0.014 | 0.999 / 0.005 | 0.995 / 0.016 | 2.241 / 1.666 | 0.988 / 0.047 | 0.988 / 0.047 | 0.997 / 0.040 | 0.996 / 0.012 | 0.993 / 0.031 | 0.993 / 0.031 |
-| environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 0.996 / 0.014 | 0.996 / 0.014 | 0.997 / 0.012 | 0.998 / 0.006 | 0.996 / 0.012 | 2.332 / 1.737 | 0.989 / 0.043 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.010 | 0.985 / 0.034 | 0.985 / 0.034 |
-| instancing | 0.001 | 0.001 | 0.020 | 0.021 | 0.021 | 0.008 | 0.007 | 0.041 | 0.010 | 0.010 | 0.039 | 0.002 | 0.022 | 0.022 |
+| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.031 / 0.049 | 1.033 / 0.051 | 1.033 / 0.051 | 1.111 / 0.123 | 1.086 / 0.098 | 1.303 / 0.469 | 1.097 / 0.117 | 1.097 / 0.117 | 0.941 / 0.169 | 1.063 / 0.088 | 0.999 / 0.051 | 0.999 / 0.051 |
+| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.034 / 0.499 | 1.034 / 0.501 | 1.034 / 0.501 | 1.123 / 0.596 | 1.066 / 0.069 | 4.664 / 1.665 | 1.108 / 0.583 | 1.108 / 0.582 | 0.944 / 0.074 | 1.021 / 0.490 | 1.011 / 0.478 | 1.011 / 0.478 |
+| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.966 / 0.039 | 0.966 / 0.039 | 0.967 / 0.039 | 1.041 / 0.046 | 1.005 / 0.008 | 0.389 / 0.725 | 1.021 / 0.036 | 1.021 / 0.036 | 0.875 / 0.186 | 0.998 / 0.037 | 0.966 / 0.039 | 0.966 / 0.039 |
+| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.974 / 0.044 | 0.974 / 0.043 | 0.974 / 0.043 | 1.043 / 0.046 | 1.007 / 0.008 | 0.953 / 0.065 | 0.971 / 0.034 | 0.971 / 0.034 | 1.113 / 0.113 | 0.971 / 0.036 | 0.974 / 0.043 | 0.974 / 0.043 |
+| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 0.993 / 0.021 | 0.993 / 0.021 | 0.993 / 0.021 | 0.999 / 0.005 | 0.995 / 0.017 | 2.241 / 1.666 | 0.988 / 0.047 | 0.988 / 0.047 | 0.997 / 0.040 | 0.996 / 0.012 | 0.993 / 0.031 | 0.993 / 0.031 |
+| environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 0.994 / 0.020 | 0.994 / 0.019 | 0.994 / 0.019 | 0.998 / 0.006 | 0.997 / 0.012 | 2.332 / 1.737 | 0.989 / 0.043 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.010 | 0.985 / 0.034 | 0.985 / 0.034 |
+| instancing | 0.001 | 0.001 | 0.021 | 0.021 | 0.021 | 0.008 | 0.006 | 0.041 | 0.009 | 0.009 | 0.039 | 0.002 | 0.022 | 0.022 |
+| lens shift | 0.014 | 0.014 | 0.457 | 0.305 | 0.072 | 0.080 | 0.043 | 0.816 | 0.359 | 0.360 | 0.437 | 0.085 | 0.077 | 0.077 |
+| clip start | 0.999 / 0.020 | 0.999 / 0.020 | 1.010 / 0.416 | 1.003 / 0.287 | 1.042 / 0.038 | 1.029 / 0.069 | 1.051 / 0.050 | 0.000 / 1.000 | 1.156 / 0.350 | 1.159 / 0.351 | 1.033 / 0.431 | 1.007 / 0.079 | 1.010 / 0.068 | 1.010 / 0.068 |
+| normal map | 1.000 / 0.001 | 1.000 / 0.001 | 1.050 / 0.052 | 1.050 / 0.052 | 1.050 / 0.052 | 1.143 / 0.695 | 1.051 / 0.049 | 2.356 / 1.201 | 1.030 / 0.032 | 1.031 / 0.034 | 1.047 / 0.047 | 1.053 / 0.051 | 1.050 / 0.052 | 1.050 / 0.052 |
+| world for camera rays | 1.000 / 0.004 | 1.000 / 0.004 | 0.978 / 0.053 | 0.976 / 0.052 | 0.976 / 0.052 | 0.993 / 0.019 | 0.986 / 0.032 | 1.001 / 0.318 | 0.952 / 0.116 | 0.953 / 0.116 | 0.989 / 0.099 | 0.987 / 0.030 | 0.975 / 0.078 | 0.975 / 0.078 |
+| emissive room | 1.001 / 0.006 | 1.001 / 0.006 | 0.922 / 0.051 | 0.624 / 0.204 | 0.932 / 0.038 | 0.335 / 0.900 | 0.981 / 0.014 | 0.359 / 0.935 | 1.021 / 0.017 | 1.020 / 0.016 | 0.708 / 0.443 | 0.345 / 0.899 | 0.933 / 0.041 | 0.933 / 0.041 |
+| light falloff | 0.999 / 0.009 | 0.999 / 0.009 | 0.347 / 0.844 | 0.347 / 0.844 | 0.347 / 0.844 | 0.347 / 0.844 | 1.016 / 0.033 | 20.062 / 4.910 | 0.355 / 0.843 | 0.355 / 0.843 | 0.315 / 0.867 | 0.348 / 0.844 | 0.347 / 0.843 | 0.347 / 0.843 |
 
 ### Object types
 
@@ -550,28 +578,18 @@ Cells are *mask coverage / brightness ratio / relative difference*.
 
 | | cycles (CPU) | cycles (OptiX) | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CPU) | visionaray (CUDA) | ospray | rpr | photon (CUDA) | photon (CPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.022 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.026 / 0.118 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
-| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.022 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.028 / 0.133 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
-| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.009 | 1.000 / 0.989 / 0.028 | 1.000 / 0.996 / 0.010 | 1.000 / 1.001 / 0.008 | 1.000 / 1.000 / 0.003 | 1.000 / 1.030 / 0.102 | 1.000 / 1.001 / 0.010 | 1.000 / 1.000 / 0.009 | 1.000 / 0.993 / 0.021 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 |
-| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.011 | 1.000 / 0.987 / 0.035 | 1.000 / 0.998 / 0.015 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.036 / 0.128 | 0.987 / 0.999 / 0.017 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
-| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 1.000 / 0.983 / 0.056 | 0.997 / 1.121 / 0.411 | 0.998 / 1.017 / 0.051 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.005 | 0.992 / 1.121 / 0.411 | 0.999 / 0.985 / 0.053 | 0.998 / 0.986 / 0.053 | 1.000 / 1.020 / 0.059 | 0.995 / 1.019 / 0.054 | 0.999 / 1.019 / 0.055 | 0.999 / 1.019 / 0.055 |
-| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 0.999 / 0.006 | 1.000 / 0.995 / 0.028 | 1.000 / 0.998 / 0.010 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.001 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.006 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.015 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 |
-| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 0.999 / 0.007 | 0.999 / 0.990 / 0.039 | 1.000 / 0.999 / 0.008 | 0.999 / 0.995 / 0.021 | 0.999 / 1.006 / 0.027 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.007 | 0.997 / 1.001 / 0.006 | 1.000 / 0.996 / 0.016 | 0.999 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
-| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.023 | 1.000 / 0.986 / 0.040 | 1.000 / 1.000 / 0.021 | 1.000 / 1.002 / 0.022 | 1.000 / 1.024 / 0.070 | 1.000 / 1.060 / 0.184 | 1.000 / 1.003 / 0.020 | 1.000 / 1.002 / 0.019 | 0.999 / 0.992 / 0.032 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
-| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.007 | 1.000 / 1.000 / 0.017 | 1.000 / 1.000 / 0.012 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.009 / 0.043 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.006 | 1.000 / 0.995 / 0.021 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
-| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.004 / 0.018 | 1.000 / 1.006 / 0.036 | 1.000 / 1.014 / 0.081 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 1.022 / 0.080 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.990 / 0.038 | 1.000 / 1.001 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 |
-| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.020 | 1.000 / 0.997 / 0.015 | 1.000 / 1.000 / 0.020 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.015 / 0.125 | 1.000 / 1.000 / 0.010 | 1.000 / 1.000 / 0.010 | 1.000 / 0.995 / 0.033 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 |
-| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.021 | 1.000 / 0.998 / 0.013 | 1.000 / 0.998 / 0.013 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.013 / 0.119 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.996 / 0.036 | 1.000 / 1.002 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 0.997 / 0.015 |
-
-### Camera and normal map tests
-
-Added on 2026-10-09. Cells are the relative difference to Cycles; for the clip start and the normal map *brightness ratio / relative difference*. Compare them with the basic render of the device: a lens shift or a clip start which is not applied gives 0.8 to 1.2 and more.
-
-| | cycles | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CUDA) | ospray | rpr | photon |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| lens shift | 0.014 | 0.457 | 0.305 | 0.074 | 0.181 | 0.043 | 0.816 | 0.366 | 0.061 | 0.085 | 0.080 |
-| clip start | 0.999 / 0.020 | 1.354 / 0.291 | 1.003 / 0.287 | 1.047 / 0.048 | 1.014 / 0.187 | 1.051 / 0.052 | 0.000 / 1.000 | 1.165 / 0.346 | 1.067 / 0.058 | 1.007 / 0.079 | 1.013 / 0.074 |
-| normal map | 1.000 / 0.001 | 0.606 / 0.428 | 1.050 / 0.052 | 1.133 / 0.135 | 1.143 / 0.695 | 1.051 / 0.049 | 2.356 / 1.201 | 1.123 / 0.695 | 0.609 / 0.394 | 1.053 / 0.051 | 1.143 / 0.695 |
+| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.026 / 0.118 | 1.000 / 1.003 / 0.012 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
+| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.003 | 1.000 / 1.028 / 0.133 | 1.000 / 1.003 / 0.012 | 1.000 / 1.003 / 0.012 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
+| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.003 / 0.011 | 1.000 / 0.989 / 0.028 | 1.000 / 0.996 / 0.010 | 1.000 / 1.001 / 0.008 | 1.000 / 1.000 / 0.003 | 1.000 / 1.030 / 0.102 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | 1.000 / 0.993 / 0.021 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 |
+| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.005 / 0.016 | 1.000 / 0.987 / 0.035 | 1.000 / 0.997 / 0.011 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.077 | 1.000 / 1.036 / 0.128 | 0.987 / 0.999 / 0.016 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
+| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 1.000 / 0.983 / 0.056 | 0.997 / 1.121 / 0.411 | 0.998 / 0.999 / 0.006 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.005 | 0.992 / 1.121 / 0.411 | 0.999 / 0.984 / 0.056 | 0.998 / 0.984 / 0.055 | 1.000 / 1.019 / 0.055 | 0.995 / 1.019 / 0.054 | 1.000 / 1.000 / 0.004 | 1.000 / 1.000 / 0.004 |
+| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.004 | 1.000 / 0.995 / 0.028 | 1.000 / 0.998 / 0.010 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.002 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.003 | 1.000 / 1.000 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 |
+| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 1.001 / 0.008 | 0.999 / 0.990 / 0.039 | 1.000 / 0.999 / 0.008 | 0.999 / 0.995 / 0.021 | 0.999 / 1.006 / 0.027 | 0.915 / 1.009 / 0.047 | 0.996 / 1.001 / 0.006 | 0.993 / 1.001 / 0.007 | 1.000 / 0.996 / 0.016 | 0.999 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
+| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.009 / 0.030 | 1.000 / 0.986 / 0.040 | 1.000 / 1.000 / 0.019 | 1.000 / 1.002 / 0.022 | 1.000 / 1.024 / 0.070 | 1.000 / 1.060 / 0.184 | 1.000 / 1.002 / 0.018 | 1.000 / 1.002 / 0.017 | 0.999 / 0.992 / 0.033 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
+| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.006 | 1.000 / 0.998 / 0.009 | 1.000 / 0.998 / 0.007 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.009 / 0.043 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.005 | 1.000 / 0.995 / 0.021 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
+| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.004 / 0.016 | 1.000 / 0.996 / 0.011 | 1.000 / 0.997 / 0.008 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 1.022 / 0.080 | 1.000 / 1.000 / 0.011 | 1.000 / 0.999 / 0.010 | 1.000 / 0.990 / 0.038 | 1.000 / 1.001 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 |
+| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.017 | 1.000 / 0.996 / 0.016 | 1.000 / 0.998 / 0.011 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.015 / 0.125 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.008 | 1.000 / 0.995 / 0.033 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 |
+| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.002 / 0.018 | 1.000 / 0.998 / 0.013 | 1.000 / 0.998 / 0.013 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.013 / 0.119 | 1.000 / 1.001 / 0.010 | 1.000 / 1.001 / 0.011 | 1.000 / 0.996 / 0.036 | 1.000 / 1.002 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 0.997 / 0.015 |
 
 ### Images
 

@@ -9,11 +9,11 @@ back-end. Any ANARI library can be used. The ones built and tested here are:
 | ANARI library | Renderer | Hardware |
 |---|---|---|
 | `cycles` | [cyclesphi-anari](https://github.com/It4innovations/cyclesphi-anari): Cycles itself as an ANARI device | CPU, CUDA, OptiX |
-| `barney` | [barney](https://github.com/ingowald/barney) | CUDA/OptiX |
-| `visrtx` | [VisRTX](https://github.com/NVIDIA/VisRTX), RTX device | OptiX |
+| `barney` | [barney](https://github.com/jar091/barney) | CUDA/OptiX |
+| `visrtx` | [VisRTX](https://github.com/jar091/VisRTX), RTX device | OptiX |
 | `mitsuba` | [mitsuba-anari](https://github.com/jar091/mitsuba3-anari): Mitsuba 3 | CUDA (`cuda_ad_rgb`), CPU (`llvm_ad_rgb`, `scalar_rgb`) |
 | `moonray` | [openmoonray-anari](https://github.com/jar091/openmoonray-anari): DreamWorks MoonRay | CPU (XPU) |
-| `helide` | ANARI-SDK reference device | CPU |
+| `helide` | [ANARI-SDK](https://github.com/jar091/ANARI-SDK) reference device | CPU |
 | `visionaray`, `visionaray_cuda` | [anari-visionaray](https://github.com/jar091/anari-visionaray): Visionaray | CPU, CUDA (one library each) |
 | `ospray` | [anari-ospray](https://github.com/jar091/anari-ospray): Intel OSPRay | CPU |
 | `rpr` | [RadeonProRenderANARI](https://github.com/jar091/RadeonProRenderANARI): AMD Radeon ProRender (Northstar) | GPU (CUDA on NVIDIA, HIP on AMD), CPU fallback |
@@ -198,6 +198,8 @@ build\blender\bin\Release\blender.exe --background --factory-startup -noaudio ^
 | `test_environment_map` | An HDRI lights the scene and shows in the background, also rotated by 90° |
 | `test_world_camera_ray` | A world which camera rays see five times darker than the rays which light the scene (Mix Shader by Light Path *Is Camera Ray*): the backdrop is the background image of the renderer, not the environment light. Not part of the result tables |
 | `test_device_denoiser` | The *Device Denoiser* setting is off by default; with it on, the noise of a render with four samples is printed against the one without (devices without a denoiser render the same). Not part of the result tables |
+| `test_emissive_room` | A closed room lit by nothing but an emitting plane is lit like in Cycles. A device which samples emitting surfaces as lights (it declares the material parameter `emissionSampling`) is asked to; the others only find the lamp by chance, which shows as noise |
+| `test_light_falloff` | An area light whose node tree fades its emission out over the first two meters of the ray lights the floor like in Cycles. A device takes the falloff as a ramp over the distance when it declares `falloff.distance` on lights; the others get the light with its average emission |
 | `test_background` | World color, strength and transparent film, including changes during an existing render session |
 | `test_object_types` | Geometry nodes (instances, realized, points, curves, volume), particle instances and hair, hair curves, text, bevel curve, metaball and subdivision |
 | `test_instancing` | Linked duplicates share their geometry |
