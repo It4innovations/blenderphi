@@ -7,6 +7,13 @@
 #  include "device/anari/material.h"
 #  include "device/anari/device_impl.h"
 
+#  include "kernel/svm/types.h"
+#  include "kernel/types.h"
+
+#  include "kernel/svm/color_util.h"
+#  include "kernel/svm/math_util.h"
+#  include "kernel/svm/ramp_util.h"
+
 #  include "scene/image.h"
 #  include "scene/scene.h"
 #  include "scene/shader.h"
@@ -17,6 +24,7 @@
 #  include "util/half.h"
 #  include "util/log.h"
 #  include "util/progress.h"
+#  include "util/set.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -43,6 +51,57 @@ int AnariAttributeSlots::slot_for(ustring name)
   return num_used++;
 }
 
+int AnariAttributeSlots::find(ustring name) const
+{
+  if (name.empty()) {
+    return 0;
+  }
+  for (int i = 1; i < num_used; i++) {
+    if (slots[i] == name) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+bool AnariAttributeSlots::same_slots(const AnariAttributeSlots &other) const
+{
+  if (num_used != other.num_used) {
+    return false;
+  }
+  for (int i = 1; i < num_used; i++) {
+    if (slots[i] != other.slots[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void AnariShaderSlots::restart(const Shader *shader)
+{
+  auto it = tables_.find(shader);
+  if (it == tables_.end() || restarted_.count(shader)) {
+    return;
+  }
+  restarted_[shader] = it->second;
+  it->second = AnariAttributeSlots();
+}
+
+void AnariShaderSlots::finish()
+{
+  for (const auto &it : restarted_) {
+    AnariAttributeSlots &table = tables_[it.first];
+    table.version = it.second.version + (table.same_slots(it.second) ? 0 : 1);
+  }
+  restarted_.clear();
+}
+
+void AnariShaderSlots::forget(const Shader *shader)
+{
+  tables_.erase(shader);
+  restarted_.erase(shader);
+}
+
 static string attribute_slot_name(const int slot)
 {
   return string_printf("attribute%d", slot);
@@ -57,9 +116,19 @@ AnariImageCache::AnariImageCache(AnariDevice &device) : device_(device) {}
 AnariImageCache::~AnariImageCache()
 {
   for (auto &it : entries_) {
-    if (it.second.array) {
-      anariRelease(device_.anari_device(), it.second.array);
-    }
+    release_entry(it.second);
+  }
+}
+
+void AnariImageCache::release_entry(Entry &entry)
+{
+  if (entry.sampler) {
+    anariRelease(device_.anari_device(), entry.sampler);
+    entry.sampler = nullptr;
+  }
+  if (entry.array) {
+    anariRelease(device_.anari_device(), entry.array);
+    entry.array = nullptr;
   }
 }
 
@@ -176,6 +245,27 @@ static bool image_is_srgb(ImageSlotTextureNode *node)
 
 ANARIArray2D AnariImageCache::get(Scene *scene, ImageSlotTextureNode *node)
 {
+  Entry *entry = find_entry(scene, node);
+  return entry ? entry->array : nullptr;
+}
+
+ANARISampler AnariImageCache::get_sampler(Scene *scene, ImageSlotTextureNode *node)
+{
+  Entry *entry = find_entry(scene, node);
+  if (entry == nullptr || entry->array == nullptr) {
+    return nullptr;
+  }
+  if (entry->sampler == nullptr) {
+    ANARIDevice device = device_.anari_device();
+    entry->sampler = anariNewSampler(device, "image2D");
+    anariSetParameter(device, entry->sampler, "image", ANARI_ARRAY2D, &entry->array);
+    anariCommitParameters(device, entry->sampler);
+  }
+  return entry->sampler;
+}
+
+AnariImageCache::Entry *AnariImageCache::find_entry(Scene *scene, ImageSlotTextureNode *node)
+{
   if (node == nullptr || node->handle.empty()) {
     return nullptr;
   }
@@ -196,24 +286,155 @@ ANARIArray2D AnariImageCache::get(Scene *scene, ImageSlotTextureNode *node)
 
   Entry &entry = entries_[image_info_id];
   if (entry.array == nullptr || entry.version != image->version || entry.srgb != srgb) {
-    if (entry.array) {
-      anariRelease(device_.anari_device(), entry.array);
-    }
+    release_entry(entry);
     entry.array = create_image_array(device_.anari_device(), *image, srgb);
     entry.version = image->version;
     entry.srgb = srgb;
   }
   entry.used = true;
-  return entry.array;
+  return &entry;
+}
+
+/* Texel of an image as the linear color a sampler returns for it. */
+static float4 image_texel(const AnariImage &image, const size_t index, const bool srgb)
+{
+  switch (image.data_type) {
+    case IMAGE_DATA_TYPE_BYTE4: {
+      const uchar *src = static_cast<const uchar *>(image.pixels) + index * 4;
+      const float4 color = make_float4(src[0], src[1], src[2], src[3]) * (1.0f / 255.0f);
+      return srgb ? color_srgb_to_linear_v4(color) : color;
+    }
+    case IMAGE_DATA_TYPE_BYTE: {
+      const float f = static_cast<const uchar *>(image.pixels)[index] * (1.0f / 255.0f);
+      const float4 color = make_float4(f, f, f, 1.0f);
+      return srgb ? color_srgb_to_linear_v4(color) : color;
+    }
+    case IMAGE_DATA_TYPE_FLOAT4:
+      return static_cast<const float4 *>(image.pixels)[index];
+    case IMAGE_DATA_TYPE_FLOAT: {
+      const float f = static_cast<const float *>(image.pixels)[index];
+      return make_float4(f, f, f, 1.0f);
+    }
+    case IMAGE_DATA_TYPE_HALF4: {
+      const half *src = static_cast<const half *>(image.pixels) + index * 4;
+      return make_float4(half_to_float(src[0]),
+                         half_to_float(src[1]),
+                         half_to_float(src[2]),
+                         half_to_float(src[3]));
+    }
+    case IMAGE_DATA_TYPE_HALF: {
+      const float f = half_to_float(static_cast<const half *>(image.pixels)[index]);
+      return make_float4(f, f, f, 1.0f);
+    }
+    case IMAGE_DATA_TYPE_USHORT4: {
+      const uint16_t *src = static_cast<const uint16_t *>(image.pixels) + index * 4;
+      return make_float4(src[0], src[1], src[2], src[3]) * (1.0f / 65535.0f);
+    }
+    case IMAGE_DATA_TYPE_USHORT: {
+      const float f = static_cast<const uint16_t *>(image.pixels)[index] * (1.0f / 65535.0f);
+      return make_float4(f, f, f, 1.0f);
+    }
+    default:
+      return make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+  }
+}
+
+/* The pixels of the image of a texture node as the device has them, nullptr before the scene
+ * update loaded them. */
+static const AnariImage *find_node_image(AnariDevice &device,
+                                         Scene *scene,
+                                         ImageSlotTextureNode *node)
+{
+  if (scene == nullptr || node == nullptr || node->handle.empty()) {
+    return nullptr;
+  }
+  const int kernel_id = node->handle.kernel_id();
+  if (kernel_id < 0 || size_t(kernel_id) >= scene->dscene.image_textures.size()) {
+    return nullptr;
+  }
+  const AnariImage *image = device.find_image(
+      scene->dscene.image_textures[kernel_id].image_info_id);
+  if (image == nullptr || image->pixels == nullptr || image->width <= 0 || image->height <= 0) {
+    return nullptr;
+  }
+  return image;
+}
+
+bool AnariImageCache::lookup_texels(Scene *scene,
+                                    ImageSlotTextureNode *node,
+                                    const vector<float2> &coordinates,
+                                    vector<float4> &texels)
+{
+  const AnariImage *image = find_node_image(device_, scene, node);
+  if (image == nullptr) {
+    return false;
+  }
+  const ExtensionType extension = (node->type == ImageTextureNode::get_node_type()) ?
+                                      static_cast<ImageTextureNode *>(node)->get_extension() :
+                                      EXTENSION_REPEAT;
+  const bool srgb = image_is_srgb(node);
+  texels.reserve(texels.size() + coordinates.size());
+  for (const float2 &uv : coordinates) {
+    float s = isfinite_safe(uv.x) ? uv.x : 0.0f;
+    float t = isfinite_safe(uv.y) ? uv.y : 0.0f;
+    switch (extension) {
+      case EXTENSION_CLIP:
+        if (s < 0.0f || s > 1.0f || t < 0.0f || t > 1.0f) {
+          texels.push_back(zero_float4());
+          continue;
+        }
+        break;
+      case EXTENSION_EXTEND:
+        break;
+      case EXTENSION_MIRROR:
+        s -= 2.0f * floorf(s * 0.5f);
+        t -= 2.0f * floorf(t * 0.5f);
+        s = (s > 1.0f) ? 2.0f - s : s;
+        t = (t > 1.0f) ? 2.0f - t : t;
+        break;
+      case EXTENSION_REPEAT:
+      default:
+        s -= floorf(s);
+        t -= floorf(t);
+        break;
+    }
+    const size_t x = size_t(clamp(int(s * float(image->width)), 0, image->width - 1));
+    const size_t y = size_t(clamp(int(t * float(image->height)), 0, image->height - 1));
+    texels.push_back(image_texel(*image, x + y * size_t(image->width), srgb));
+  }
+  return true;
+}
+
+bool AnariImageCache::sample_texels(Scene *scene,
+                                    ImageSlotTextureNode *node,
+                                    const int max_samples,
+                                    vector<float4> &texels)
+{
+  const AnariImage *image = find_node_image(device_, scene, node);
+  if (image == nullptr) {
+    return false;
+  }
+
+  const bool srgb = image_is_srgb(node);
+  const int side = max(int(sqrtf(float(max_samples))), 1);
+  const int num_x = min(image->width, side);
+  const int num_y = min(image->height, side);
+  texels.reserve(texels.size() + size_t(num_x) * num_y);
+  for (int j = 0; j < num_y; j++) {
+    const size_t y = size_t((float(j) + 0.5f) / float(num_y) * float(image->height));
+    for (int i = 0; i < num_x; i++) {
+      const size_t x = size_t((float(i) + 0.5f) / float(num_x) * float(image->width));
+      texels.push_back(image_texel(*image, x + y * size_t(image->width), srgb));
+    }
+  }
+  return true;
 }
 
 void AnariImageCache::garbage_collect()
 {
   for (auto it = entries_.begin(); it != entries_.end();) {
     if (!it->second.used) {
-      if (it->second.array) {
-        anariRelease(device_.anari_device(), it->second.array);
-      }
+      release_entry(it->second);
       it = entries_.erase(it);
     }
     else {
@@ -256,6 +477,560 @@ void AnariValue::apply_dot(const float4 weights)
   out_row[0] = out_row[1] = out_row[2] = row;
   out_row[3] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
   out_offset = make_float4(offset, offset, offset, 1.0f);
+}
+
+void AnariMaterialBuilder::apply_function(AnariValue &value,
+                                          const std::function<float4(const float4 &)> &function)
+{
+  if (value.is_constant()) {
+    value.constant = function(value.constant);
+    return;
+  }
+
+  /* What the sampler reads before its output transform: texels of the image, or colors spread
+   * over the unit cube for attributes and for images which are not loaded. */
+  vector<float4> samples;
+  if (value.type != AnariValue::IMAGE ||
+      !images_.sample_texels(scene_, value.image, 4096, samples))
+  {
+    const int grid = 6;
+    for (int i = 0; i < grid * grid * grid; i++) {
+      samples.push_back(make_float4((float(i % grid) + 0.5f) / float(grid),
+                                    (float((i / grid) % grid) + 0.5f) / float(grid),
+                                    (float(i / (grid * grid)) + 0.5f) / float(grid),
+                                    1.0f));
+    }
+  }
+
+  /* An alpha which is the same everywhere can't be told from the constant term. */
+  bool use_alpha = false;
+  for (const float4 &sample : samples) {
+    use_alpha |= (sample.w != samples[0].w);
+  }
+
+  /* Least squares fit of every output channel over (r, g, b, a, 1): accumulate the normal
+   * equations, with the four right hand sides next to the matrix. */
+  const int num = 5;
+  double m[num][num + 4] = {};
+  for (const float4 &sample : samples) {
+    float4 in;
+    for (int i = 0; i < 4; i++) {
+      in[i] = dot(value.out_row[i], sample) + value.out_offset[i];
+    }
+    const float4 target = function(in);
+    if (!isfinite_safe(target.x) || !isfinite_safe(target.y) || !isfinite_safe(target.z) ||
+        !isfinite_safe(target.w))
+    {
+      continue;
+    }
+    const double x[num] = {sample.x, sample.y, sample.z, use_alpha ? sample.w : 0.0, 1.0};
+    for (int i = 0; i < num; i++) {
+      for (int j = 0; j < num; j++) {
+        m[i][j] += x[i] * x[j];
+      }
+      for (int c = 0; c < 4; c++) {
+        m[i][num + c] += x[i] * double(target[c]);
+      }
+    }
+  }
+
+  /* A little regularization: images of a single color or of grays leave the fit undetermined,
+   * the smallest transform is as good as any other one there. */
+  double trace = 0.0;
+  for (int i = 0; i < num; i++) {
+    trace += m[i][i];
+  }
+  for (int i = 0; i < num; i++) {
+    m[i][i] += 1e-7 * trace + 1e-12;
+  }
+
+  /* Gauss-Jordan elimination with partial pivoting. */
+  for (int i = 0; i < num; i++) {
+    int pivot = i;
+    for (int j = i + 1; j < num; j++) {
+      if (std::abs(m[j][i]) > std::abs(m[pivot][i])) {
+        pivot = j;
+      }
+    }
+    if (pivot != i) {
+      for (int k = 0; k < num + 4; k++) {
+        std::swap(m[i][k], m[pivot][k]);
+      }
+    }
+    const double inverse = 1.0 / m[i][i];
+    for (int k = 0; k < num + 4; k++) {
+      m[i][k] *= inverse;
+    }
+    for (int j = 0; j < num; j++) {
+      if (j != i) {
+        const double factor = m[j][i];
+        for (int k = 0; k < num + 4; k++) {
+          m[j][k] -= factor * m[i][k];
+        }
+      }
+    }
+  }
+
+  for (int c = 0; c < 4; c++) {
+    value.out_row[c] = make_float4(
+        float(m[0][num + c]), float(m[1][num + c]), float(m[2][num + c]), float(m[3][num + c]));
+    value.out_offset[c] = float(m[4][num + c]);
+  }
+}
+
+bool AnariMaterialBuilder::surface_values(const Shader *shader,
+                                          const AnariValue &value,
+                                          vector<float4> &values)
+{
+  /* Not for the analysis before the scene update, which only needs to know what a material is
+   * made of. */
+  if (!surface_attribute_ || shader == nullptr || scene_ == nullptr || analysis_ ||
+      (value.type != AnariValue::IMAGE && value.type != AnariValue::ATTRIBUTE))
+  {
+    return false;
+  }
+  const std::pair<const Shader *, string> key(shader, value.attribute);
+  auto cached = surface_cache_.find(key);
+  if (cached == surface_cache_.end()) {
+    vector<float4> points;
+    if (!surface_attribute_(shader, value.attribute, points)) {
+      points.clear();
+    }
+    cached = surface_cache_.emplace(key, std::move(points)).first;
+  }
+  const vector<float4> &attribute = cached->second;
+  if (attribute.empty()) {
+    return false;
+  }
+  if (value.type == AnariValue::ATTRIBUTE) {
+    values = attribute;
+    return true;
+  }
+  vector<float2> coordinates;
+  coordinates.reserve(attribute.size());
+  for (const float4 &a : attribute) {
+    const float3 uv = transform_point(&value.in_transform, make_float3(a.x, a.y, a.z));
+    coordinates.push_back(make_float2(uv.x, uv.y));
+  }
+  values.clear();
+  return images_.lookup_texels(scene_, value.image, coordinates, values) && !values.empty();
+}
+
+AnariValue AnariMaterialBuilder::averaged(const AnariValue &value)
+{
+  float4 average;
+  if (value.is_constant() || value.unknown || !average_value(value, average)) {
+    return value;
+  }
+  return AnariValue::from_constant(average);
+}
+
+bool AnariMaterialBuilder::average_value(const AnariValue &value,
+                                         float4 &average,
+                                         const Shader *shader)
+{
+  if (value.is_constant()) {
+    average = value.constant;
+    return true;
+  }
+  float variance;
+  return value_statistics(value, average, variance, shader);
+}
+
+bool AnariMaterialBuilder::value_statistics(const AnariValue &value,
+                                            float4 &average,
+                                            float &variance,
+                                            const Shader *shader)
+{
+  variance = 0.0f;
+  if (value.is_constant()) {
+    average = value.constant;
+    return true;
+  }
+  vector<float4> texels;
+  if (!surface_values(shader ? shader : shader_, value, texels)) {
+    texels.clear();
+    if (value.type != AnariValue::IMAGE ||
+        !images_.sample_texels(scene_, value.image, 4096, texels) || texels.empty())
+    {
+      return false;
+    }
+  }
+  float4 sum = zero_float4();
+  float4 sum_squares = zero_float4();
+  for (const float4 &texel : texels) {
+    float4 color;
+    for (int i = 0; i < 4; i++) {
+      color[i] = dot(value.out_row[i], texel) + value.out_offset[i];
+    }
+    sum += color;
+    sum_squares += color * color;
+  }
+  average = sum / float(texels.size());
+  const float4 spread = sum_squares / float(texels.size()) - average * average;
+  variance = max(spread.x, 0.0f) + max(spread.y, 0.0f) + max(spread.z, 0.0f);
+  return true;
+}
+
+/* --------------------------------------------------------------------
+ * Baking of the base color.
+ */
+
+static bool bake_depends_on_view(const ShaderOutput *output, int depth = 0);
+
+namespace {
+
+/* Color of a closure as a constant or the output of a node. */
+struct BakeColor {
+  bool valid = false;
+  ShaderOutput *output = nullptr;
+  float3 constant = zero_float3();
+};
+
+BakeColor bake_input_color(ShaderNode *node, const char *name)
+{
+  BakeColor color;
+  ShaderInput *input = node->input(name);
+  if (input == nullptr) {
+    return color;
+  }
+  color.valid = true;
+  if (input->link) {
+    color.output = input->link;
+  }
+  else {
+    color.constant = node->get_float3(input->socket_type);
+  }
+  return color;
+}
+
+/* The color of the closures behind an output, mixed like the closures are. Nodes are added to
+ * the graph for the mixes. */
+BakeColor bake_closure_color(ShaderGraph *graph,
+                             ShaderOutput *output,
+                             const bool emission,
+                             const int depth)
+{
+  if (output == nullptr || depth > 16) {
+    return BakeColor();
+  }
+  ShaderNode *node = output->parent;
+  const NodeType *type = node->type;
+
+  if (emission) {
+    if (type == EmissionNode::get_node_type()) {
+      /* Color times strength. */
+      const BakeColor color = bake_input_color(node, "Color");
+      ShaderInput *strength = node->input("Strength");
+      VectorMathNode *multiply = graph->create_node<VectorMathNode>();
+      multiply->set_math_type(NODE_VECTOR_MATH_MULTIPLY);
+      if (color.output) {
+        graph->connect(color.output, multiply->input("Vector1"));
+      }
+      else {
+        multiply->set_vector1(color.constant);
+      }
+      if (strength->link) {
+        graph->connect(strength->link, multiply->input("Vector2"));
+      }
+      else {
+        multiply->set_vector2(make_float3(node->get_float(strength->socket_type)));
+      }
+      BakeColor result;
+      result.valid = true;
+      result.output = multiply->output("Vector");
+      return result;
+    }
+    if (type != MixClosureNode::get_node_type() && type != AddClosureNode::get_node_type()) {
+      /* A shader which does not emit. */
+      return BakeColor();
+    }
+  }
+  else {
+    if (type == PrincipledBsdfNode::get_node_type() || type == MetallicBsdfNode::get_node_type())
+    {
+      return bake_input_color(node, "Base Color");
+    }
+    if (type == EmissionNode::get_node_type() || type == TransparentBsdfNode::get_node_type() ||
+        type == RayPortalBsdfNode::get_node_type() || type == HoldoutNode::get_node_type())
+    {
+      /* No color of their own: the one of the shader they are combined with. */
+      return BakeColor();
+    }
+  }
+
+  if (type == MixClosureNode::get_node_type() || type == AddClosureNode::get_node_type()) {
+    ShaderInput *in_a = node->input("Closure1");
+    ShaderInput *in_b = node->input("Closure2");
+    BakeColor a = bake_closure_color(graph, in_a ? in_a->link : nullptr, emission, depth + 1);
+    BakeColor b = bake_closure_color(graph, in_b ? in_b->link : nullptr, emission, depth + 1);
+    if (!a.valid && !b.valid) {
+      return BakeColor();
+    }
+    if (type == AddClosureNode::get_node_type()) {
+      /* The sum of two emissions is not supported, one of them is used. */
+      return a.valid ? a : b;
+    }
+    if (emission) {
+      /* A shader without emission mixes in black: the weight of the other one. */
+      a.valid = b.valid = true;
+    }
+    else if (!a.valid || !b.valid) {
+      return a.valid ? a : b;
+    }
+    else if (bake_depends_on_view(node->input("Fac")->link)) {
+      /* A Fresnel or facing factor: the dielectric of a diffuse and a glossy shader, whose
+       * color is the one of the diffuse shader. */
+      const NodeType *type_a = in_a->link->parent->type;
+      const bool a_is_glossy = type_a == GlossyBsdfNode::get_node_type() ||
+                               type_a == MetallicBsdfNode::get_node_type();
+      return a_is_glossy ? b : a;
+    }
+
+    MixNode *mix = graph->create_node<MixNode>();
+    mix->set_mix_type(NODE_MIX_BLEND);
+    mix->set_use_clamp(false);
+    ShaderInput *fac = node->input("Fac");
+    if (fac->link) {
+      graph->connect(fac->link, mix->input("Fac"));
+    }
+    else {
+      mix->set_fac(node->get_float(fac->socket_type));
+    }
+    if (a.output) {
+      graph->connect(a.output, mix->input("Color1"));
+    }
+    else {
+      mix->set_color1(a.constant);
+    }
+    if (b.output) {
+      graph->connect(b.output, mix->input("Color2"));
+    }
+    else {
+      mix->set_color2(b.constant);
+    }
+    BakeColor color;
+    color.valid = true;
+    color.output = mix->output("Color");
+    return color;
+  }
+  return bake_input_color(node, "Color");
+}
+
+}  // namespace
+
+/* Whether a value is computed from a Fresnel or Layer Weight node: directly, or through the
+ * math and mix nodes node groups shape the reflectivity with. */
+static bool depends_on_fresnel(const ShaderOutput *output, const int depth)
+{
+  if (output == nullptr || depth > 16) {
+    return false;
+  }
+  const ShaderNode *node = output->parent;
+  if (node->type == LayerWeightNode::get_node_type() || node->type == FresnelNode::get_node_type())
+  {
+    return true;
+  }
+  for (const ShaderInput *input : node->inputs) {
+    if (input->link && depends_on_fresnel(input->link, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Whether an output depends on the direction the surface is seen from. */
+static bool bake_depends_on_view(const ShaderOutput *output, const int depth)
+{
+  if (output == nullptr || depth > 64) {
+    return false;
+  }
+  const ShaderNode *node = output->parent;
+  const NodeType *type = node->type;
+  if (type == LayerWeightNode::get_node_type() || type == FresnelNode::get_node_type() ||
+      type == LightPathNode::get_node_type() || type == CameraNode::get_node_type())
+  {
+    return true;
+  }
+  if (type == GeometryNode::get_node_type() &&
+      (output->name() == "Incoming" || output->name() == "Backfacing"))
+  {
+    return true;
+  }
+  if (type == TextureCoordinateNode::get_node_type() &&
+      (output->name() == "Camera" || output->name() == "Window" ||
+       output->name() == "Reflection"))
+  {
+    return true;
+  }
+  for (const ShaderInput *input : node->inputs) {
+    if (input->link && bake_depends_on_view(input->link, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Whether an output depends on the path or the camera: what has no value at all where the
+ * kernel evaluates a shader for baking. Layer Weight and Fresnel nodes are not counted, see
+ * `bake_fix_view`. */
+static bool bake_depends_on_path(const ShaderOutput *output, const int depth = 0)
+{
+  if (output == nullptr || depth > 64) {
+    return false;
+  }
+  const ShaderNode *node = output->parent;
+  const NodeType *type = node->type;
+  if (type == LayerWeightNode::get_node_type() || type == FresnelNode::get_node_type()) {
+    return false;
+  }
+  if (type == LightPathNode::get_node_type() || type == CameraNode::get_node_type()) {
+    return true;
+  }
+  if (type == GeometryNode::get_node_type() &&
+      (output->name() == "Incoming" || output->name() == "Backfacing"))
+  {
+    return true;
+  }
+  if (type == TextureCoordinateNode::get_node_type() &&
+      (output->name() == "Camera" || output->name() == "Window" ||
+       output->name() == "Reflection"))
+  {
+    return true;
+  }
+  for (const ShaderInput *input : node->inputs) {
+    if (input->link && bake_depends_on_path(input->link, depth + 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* The value of an output of a Layer Weight or Fresnel node for one direction of view, as in
+ * #svm_node_layer_weight and #svm_node_fresnel for the front side. */
+static float bake_view_value(const ShaderOutput *output, const float cosine)
+{
+  ShaderNode *node = output->parent;
+  const auto constant = [&](const char *name, const float default_value) {
+    ShaderInput *input = node->input(name);
+    return (input && !input->link) ? node->get_float(input->socket_type) : default_value;
+  };
+  const auto fresnel = [&](const float eta) {
+    float g = eta * eta - 1.0f + cosine * cosine;
+    if (g <= 0.0f) {
+      return 1.0f;
+    }
+    g = sqrtf(g);
+    const float a = (g - cosine) / (g + cosine);
+    const float b = (cosine * (g + cosine) - 1.0f) / (cosine * (g - cosine) + 1.0f);
+    return 0.5f * a * a * (1.0f + b * b);
+  };
+  if (node->type == FresnelNode::get_node_type()) {
+    return fresnel(max(constant("IOR", 1.5f), 1e-5f));
+  }
+  float blend = constant("Blend", 0.5f);
+  if (output->name() == "Fresnel") {
+    return fresnel(1.0f / max(1.0f - blend, 1e-5f));
+  }
+  float facing = cosine;
+  if (blend != 0.5f) {
+    blend = clamp(blend, 0.0f, 1.0f - 1e-5f);
+    blend = (blend < 0.5f) ? 2.0f * blend : 0.5f / (1.0f - blend);
+    facing = powf(facing, blend);
+  }
+  return 1.0f - facing;
+}
+
+/* The kernel evaluates a shader for baking without a direction of view, where Layer Weight
+ * and Fresnel nodes return what they are at grazing angles: the rim color everywhere. The
+ * inputs they feed behind the baked output get the value for a typical direction of view
+ * instead (the mean cosine of a surface which is seen from all sides). */
+static void bake_fix_view(ShaderGraph *graph, ShaderOutput *output, set<ShaderNode *> &visited)
+{
+  ShaderNode *node = output->parent;
+  if (!visited.insert(node).second) {
+    return;
+  }
+  for (ShaderInput *input : node->inputs) {
+    ShaderOutput *link = input->link;
+    if (link == nullptr) {
+      continue;
+    }
+    const NodeType *type = link->parent->type;
+    if (type != LayerWeightNode::get_node_type() && type != FresnelNode::get_node_type()) {
+      bake_fix_view(graph, link, visited);
+      continue;
+    }
+    const float value = bake_view_value(link, 2.0f / 3.0f);
+    graph->disconnect(input);
+    switch (input->socket_type.type) {
+      case SocketType::FLOAT:
+        node->set(input->socket_type, value);
+        break;
+      case SocketType::COLOR:
+      case SocketType::VECTOR:
+      case SocketType::POINT:
+      case SocketType::NORMAL:
+        node->set(input->socket_type, make_float3(value));
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+bool anari_link_bake(Shader *shader, const AnariBakeMode mode)
+{
+  ShaderGraph *graph = shader->graph.get();
+  if (graph == nullptr || graph->finalized ||
+      shader->get_displacement_method() != DISPLACE_BUMP)
+  {
+    return false;
+  }
+  ShaderInput *surface = graph->output()->input("Surface");
+  ShaderInput *displacement = graph->output()->input("Displacement");
+  if (surface == nullptr || surface->link == nullptr || displacement == nullptr) {
+    return false;
+  }
+
+  BakeColor color;
+  if (mode == ANARI_BAKE_MASK) {
+    ShaderNode *mix = surface->link->parent;
+    ShaderInput *fac = (mix->type == MixClosureNode::get_node_type()) ? mix->input("Fac") :
+                                                                        nullptr;
+    color.valid = fac != nullptr;
+    color.output = fac ? fac->link : nullptr;
+  }
+  else {
+    color = bake_closure_color(graph, surface->link, mode == ANARI_BAKE_EMISSION, 0);
+  }
+  if (!color.valid || color.output == nullptr || bake_depends_on_path(color.output)) {
+    return false;
+  }
+  if (bake_depends_on_view(color.output)) {
+    set<ShaderNode *> visited;
+    bake_fix_view(graph, color.output, visited);
+  }
+  if (displacement->link) {
+    graph->disconnect(displacement);
+  }
+  graph->connect(color.output, displacement);
+  return true;
+}
+
+/* Apply a function of one number to the color channels. */
+static std::function<float4(const float4 &)> per_channel(const std::function<float(float)> &f)
+{
+  return [f](const float4 &c) { return make_float4(f(c.x), f(c.y), f(c.z), c.w); };
+}
+
+/* Apply a function of a color, the alpha is passed through. */
+static std::function<float4(const float4 &)> per_color(const std::function<float3(float3)> &f)
+{
+  return [f](const float4 &c) {
+    const float3 result = f(make_float3(c.x, c.y, c.z));
+    return make_float4(result.x, result.y, result.z, c.w);
+  };
 }
 
 static float4 luminance_weights()
@@ -314,7 +1089,56 @@ AnariPrincipled AnariPrincipled::mix(const AnariPrincipled &a,
   r.ior = a.ior * (1.0f - fac) + b.ior * fac;
   r.has_bsdf = a.has_bsdf || b.has_bsdf;
   r.has_emission = a.has_emission || b.has_emission;
+  /* Two textured colors can't be mixed, one of them was used. */
+  r.emissive_lossy = a.emissive_lossy || b.emissive_lossy;
+  r.base_color_lossy = a.base_color_lossy || b.base_color_lossy ||
+                       (a.has_bsdf && b.has_bsdf && !a.base_color.is_constant() &&
+                        !b.base_color.is_constant());
   r.is_diffuse = (a.is_diffuse || !a.has_bsdf) && (b.is_diffuse || !b.has_bsdf);
+  return r;
+}
+
+static AnariValue mask_values(const AnariValue &a, const AnariValue &b, const AnariValue &mask)
+{
+  if (a.constant.x == b.constant.x && a.constant.y == b.constant.y &&
+      a.constant.z == b.constant.z && a.constant.w == b.constant.w)
+  {
+    return AnariValue::from_constant(a.constant);
+  }
+  /* a + (b - a) * mask, with the mask in the first channel. */
+  AnariValue result = mask;
+  for (int i = 0; i < 4; i++) {
+    result.out_row[i] = make_float4(b.constant[i] - a.constant[i], 0.0f, 0.0f, 0.0f);
+    result.out_offset[i] = a.constant[i];
+  }
+  return result;
+}
+
+AnariPrincipled AnariPrincipled::mix_masked(const AnariPrincipled &a,
+                                            const AnariPrincipled &b,
+                                            const AnariValue &mask)
+{
+  AnariPrincipled r;
+  r.base_color = mask_values(a.base_color, b.base_color, mask);
+  r.metallic = mask_values(a.metallic, b.metallic, mask);
+  r.roughness = mask_values(a.roughness, b.roughness, mask);
+  r.opacity = mask_values(a.opacity, b.opacity, mask);
+  r.transmission = mask_values(a.transmission, b.transmission, mask);
+  r.specular = mask_values(a.specular, b.specular, mask);
+  r.specular_color = mask_values(a.specular_color, b.specular_color, mask);
+  r.clearcoat = mask_values(a.clearcoat, b.clearcoat, mask);
+  r.clearcoat_roughness = mask_values(a.clearcoat_roughness, b.clearcoat_roughness, mask);
+  r.sheen_color = mask_values(a.sheen_color, b.sheen_color, mask);
+  r.sheen_roughness = mask_values(a.sheen_roughness, b.sheen_roughness, mask);
+  r.emissive = mask_values(a.emissive, b.emissive, mask);
+  /* Not maskable: of the shader which has a BSDF, or the average. */
+  r.ior = (a.has_bsdf && b.has_bsdf) ? 0.5f * (a.ior + b.ior) : (a.has_bsdf ? a.ior : b.ior);
+  const AnariPrincipled &film = (a.iridescence > 0.0f) ? a : b;
+  r.iridescence = film.iridescence;
+  r.iridescence_thickness = film.iridescence_thickness;
+  r.iridescence_ior = film.iridescence_ior;
+  r.has_bsdf = a.has_bsdf || b.has_bsdf;
+  r.has_emission = a.has_emission || b.has_emission;
   return r;
 }
 
@@ -324,9 +1148,9 @@ AnariPrincipled AnariPrincipled::mix(const AnariPrincipled &a,
 
 AnariMaterialBuilder::AnariMaterialBuilder(AnariDevice &device,
                                            Scene *scene,
-                                           AnariAttributeSlots &slots,
+                                           AnariShaderSlots &slots,
                                            AnariImageCache &images)
-    : device_(device), scene_(scene), slots_(slots), images_(images)
+    : device_(device), scene_(scene), shader_slots_(slots), images_(images)
 {
 }
 
@@ -412,19 +1236,26 @@ void AnariMaterialBuilder::evaluate_texture_coordinate(ShaderInput *vector_input
     }
     if (node->type == UVMapNode::get_node_type()) {
       const ustring name = static_cast<UVMapNode *>(node)->get_attribute();
-      const int slot = slots_.slot_for(name);
+      const int slot = slots_->slot_for(name);
       value.attribute = attribute_slot_name(max(slot, 0));
       break;
     }
     if (node->type == AttributeNode::get_node_type()) {
       const ustring name = static_cast<AttributeNode *>(node)->get_attribute();
-      const int slot = slots_.slot_for(name);
+      const int slot = slots_->slot_for(name);
       value.attribute = attribute_slot_name(max(slot, 0));
       break;
     }
     if (node->type == TextureCoordinateNode::get_node_type()) {
       const string output = link->name().string();
-      if (output == "Generated" || output == "Object") {
+      if (output == "Generated") {
+        /* The coordinates Cycles has for the mesh, normalized to its texture space, in an
+         * attribute slot. The object position is not normalized, and several devices return
+         * the world position for it or don't take it for a 2D image. */
+        const int slot = slots_->slot_for(ustring("generated"));
+        value.attribute = (slot > 0) ? attribute_slot_name(slot) : string("objectPosition");
+      }
+      else if (output == "Object") {
         value.attribute = "objectPosition";
       }
       else if (output == "Normal") {
@@ -472,7 +1303,7 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
   if (type == ImageTextureNode::get_node_type() || type == EnvironmentTextureNode::get_node_type())
   {
     ImageSlotTextureNode *image = static_cast<ImageSlotTextureNode *>(node);
-    if (image->handle.empty()) {
+    if (image->handle.empty() && !analysis_) {
       return default_value;
     }
     AnariValue value;
@@ -494,7 +1325,7 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
     AnariValue value;
     value.type = AnariValue::ATTRIBUTE;
     /* The default color attribute is exported as ANARI vertex color. */
-    const int slot = layer.empty() ? -1 : slots_.slot_for(layer);
+    const int slot = layer.empty() ? -1 : slots_->slot_for(layer);
     value.attribute = (slot > 0) ? attribute_slot_name(slot) : string("color");
     if (output_name == "Alpha") {
       value.apply_dot(make_float4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -503,7 +1334,7 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
   }
   if (type == AttributeNode::get_node_type()) {
     const ustring name = static_cast<AttributeNode *>(node)->get_attribute();
-    const int slot = slots_.slot_for(name);
+    const int slot = slots_->slot_for(name);
     if (slot < 0) {
       return default_value;
     }
@@ -517,6 +1348,63 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
       value.apply_dot(make_float4(0.0f, 0.0f, 0.0f, 1.0f));
     }
     return value;
+  }
+
+  /* The length of the ray which arrives at a light, for lights with their own falloff. */
+  if (type == LightPathNode::get_node_type() && output_name == "Ray Length" &&
+      light_ray_length_ >= 0.0f)
+  {
+    return AnariValue::from_float(light_ray_length_);
+  }
+  if (type == LightFalloffNode::get_node_type()) {
+    /* The quadratic output is the plain strength, the others take the falloff back. */
+    float strength = input_float(node, "Strength", 100.0f);
+    if (light_ray_length_ >= 0.0f) {
+      const float squared = sqr(light_ray_length_);
+      if (output_name == "Linear") {
+        strength *= light_ray_length_;
+      }
+      else if (output_name == "Constant") {
+        strength *= squared;
+      }
+      const float smooth = input_float(node, "Smooth", 0.0f);
+      if (smooth > 0.0f) {
+        strength *= squared / (smooth + squared);
+      }
+    }
+    return AnariValue::from_float(strength);
+  }
+
+  /* What depends on the direction of view, for one direction: see #set_view_cosine. As in
+   * #svm_node_layer_weight and #svm_node_fresnel, for the front side. */
+  if (view_cosine_ >= 0.0f && (type == LayerWeightNode::get_node_type() ||
+                               type == FresnelNode::get_node_type()))
+  {
+    const auto fresnel = [&](const float eta) {
+      const float c = view_cosine_;
+      float g = eta * eta - 1.0f + c * c;
+      if (g <= 0.0f) {
+        return 1.0f;
+      }
+      g = sqrtf(g);
+      const float a = (g - c) / (g + c);
+      const float b = (c * (g + c) - 1.0f) / (c * (g - c) + 1.0f);
+      return 0.5f * a * a * (1.0f + b * b);
+    };
+    if (type == FresnelNode::get_node_type()) {
+      return AnariValue::from_float(fresnel(max(input_float(node, "IOR", 1.5f), 1e-5f)));
+    }
+    float blend = input_float(node, "Blend", 0.5f);
+    if (output_name == "Fresnel") {
+      return AnariValue::from_float(fresnel(1.0f / max(1.0f - blend, 1e-5f)));
+    }
+    float facing = view_cosine_;
+    if (blend != 0.5f) {
+      blend = clamp(blend, 0.0f, 1.0f - 1e-5f);
+      blend = (blend < 0.5f) ? 2.0f * blend : 0.5f / (1.0f - blend);
+      facing = powf(facing, blend);
+    }
+    return AnariValue::from_float(1.0f - facing);
   }
 
   /* Constants. */
@@ -580,9 +1468,36 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
       type == MixVectorNode::get_node_type() || type == MixNode::get_node_type())
   {
     const bool legacy = (type == MixNode::get_node_type());
-    const float fac = input_float(node, legacy ? "Fac" : "Factor", 0.5f);
-    const AnariValue a = input(legacy ? "Color1" : "A", default_value);
-    const AnariValue b = input(legacy ? "Color2" : "B", default_value);
+    /* The factor may be computed by other nodes. A textured one can't be used: its average
+     * over the surface stands in for it. */
+    AnariValue fac_value = input(legacy ? "Fac" : "Factor", AnariValue::from_float(0.5f));
+    ShaderInput *fac_input = node->input(legacy ? "Fac" : "Factor");
+    if (fac_value.unknown && view_cosine_ < 0.0f && fac_input && fac_input->link &&
+        depends_on_fresnel(fac_input->link, 0))
+    {
+      /* A facing or Fresnel factor tints the rim of an object: what it is for a typical
+       * direction of view (the mean cosine of a surface seen from all sides). The default of
+       * the socket would mix half of the rim color in everywhere. */
+      view_cosine_ = 2.0f / 3.0f;
+      fac_value = input(legacy ? "Fac" : "Factor", AnariValue::from_float(0.5f));
+      view_cosine_ = -1.0f;
+      lossy_ = true;
+    }
+    if (!fac_value.is_constant() || fac_value.unknown) {
+      lossy_ = true;
+      fac_value = averaged(fac_value);
+    }
+    /* Also of nodes which can't be evaluated: behind a Color Ramp that is the color of the
+     * ramp, which says more than the default of the socket. */
+    const float fac = fac_value.is_constant() ? saturatef(fac_value.constant.x) : 0.5f;
+    AnariValue a = input(legacy ? "Color1" : "A", default_value);
+    AnariValue b = input(legacy ? "Color2" : "B", default_value);
+
+    /* Mixed with something which can't be evaluated: the other input alone is closer than a
+     * mix with a default color. */
+    if (a.unknown != b.unknown) {
+      return a.unknown ? b : a;
+    }
 
     NodeMix blend = NODE_MIX_BLEND;
     if (type == MixColorNode::get_node_type()) {
@@ -590,6 +1505,31 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
     }
     else if (legacy) {
       blend = static_cast<MixNode *>(node)->get_mix_type();
+    }
+
+    if (!a.is_constant() && !b.is_constant()) {
+      /* Two textures can't be combined: one of them keeps its sampler, the other one is its
+       * average. Dropping it instead leaves a multiplied color several times too bright. */
+      lossy_ = true;
+      /* The one which varies more over the surface is kept: stripes painted on a mesh say
+       * more than the grain of the wood they are mixed with. By the old rule where that is
+       * not known: the first one, or the one with more weight. */
+      bool keep_a = !(blend == NODE_MIX_BLEND && fac >= 0.5f);
+      float4 average_a, average_b;
+      float variance_a, variance_b;
+      if (value_statistics(a, average_a, variance_a) && value_statistics(b, average_b, variance_b))
+      {
+        /* The second one is what the first one is changed by, as much as the factor says. */
+        const float weight_a = (blend == NODE_MIX_BLEND) ? 1.0f - fac : 1.0f;
+        const float weight_b = fac;
+        keep_a = variance_a * weight_a * weight_a >= variance_b * weight_b * weight_b;
+      }
+      if (keep_a) {
+        b = averaged(b);
+      }
+      else {
+        a = averaged(a);
+      }
     }
 
     switch (blend) {
@@ -632,9 +1572,21 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
         return a;
       case NODE_MIX_BLEND:
         return mix_values(a, b, fac);
-      default:
-        /* Non-linear blend modes can't be expressed with samplers, use the base color. */
-        return a.is_constant() && !b.is_constant() ? b : a;
+      default: {
+        /* The other blend modes are not linear. */
+        if (a.is_constant() == b.is_constant() && !a.is_constant()) {
+          /* Two textures can't be combined, use the base color. */
+          return a;
+        }
+        const bool a_is_constant = a.is_constant();
+        const float3 other = make_float3(a_is_constant ? a.constant : b.constant);
+        AnariValue r = a_is_constant ? b : a;
+        apply_function(r, per_color([=](const float3 color) {
+                         return a_is_constant ? svm_mix(blend, fac, other, color) :
+                                                svm_mix(blend, fac, color, other);
+                       }));
+        return r;
+      }
     }
   }
   if (type == MathNode::get_node_type()) {
@@ -642,12 +1594,47 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
     AnariValue a = input("Value1", default_value);
     AnariValue b = input("Value2", default_value);
     const NodeMathType math_type = math->get_math_type();
-    if (a.is_constant() && b.is_constant()) {
-      /* Constant folding has already happened in most cases. */
-      return a;
+    if (a.unknown != b.unknown && node->input("Value2")->link) {
+      /* An operation with something which can't be evaluated. */
+      return a.unknown ? b : a;
     }
-    AnariValue &v = a.is_constant() ? b : a;
-    const float c = a.is_constant() ? a.constant.x : b.constant.x;
+    if (a.is_constant() && b.is_constant()) {
+      /* Cycles has folded what is constant in the graph. What is left is only constant here:
+       * the ray length of a light (#set_light_ray_length), the direction of view. */
+      if (a.unknown || b.unknown) {
+        return a;
+      }
+      const float result = svm_math(
+          math_type, a.constant.x, b.constant.x, input_float(node, "Value3", 0.0f));
+      AnariValue folded = a;
+      const float value = math->get_use_clamp() ? saturatef(result) : result;
+      folded.constant = make_float4(value, value, value, a.constant.w);
+      return folded;
+    }
+    if (!a.is_constant() && !b.is_constant()) {
+      /* Two textures can't be combined: the second one as its average. */
+      lossy_ = true;
+      b = averaged(b);
+      if (!b.is_constant()) {
+        return a;
+      }
+    }
+    const bool a_is_constant = a.is_constant();
+    AnariValue &v = a_is_constant ? b : a;
+    const float c = a_is_constant ? a.constant.x : b.constant.x;
+    const bool use_clamp = math->get_use_clamp();
+    const bool is_linear = (math_type == NODE_MATH_MULTIPLY || math_type == NODE_MATH_ADD ||
+                            math_type == NODE_MATH_SUBTRACT ||
+                            (math_type == NODE_MATH_DIVIDE && !a_is_constant && c != 0.0f));
+    if (!is_linear || use_clamp) {
+      const float c3 = input_float(node, "Value3", 0.0f);
+      apply_function(v, per_channel([=](const float x) {
+                       const float result = a_is_constant ? svm_math(math_type, c, x, c3) :
+                                                            svm_math(math_type, x, c, c3);
+                       return use_clamp ? saturatef(result) : result;
+                     }));
+      return v;
+    }
     switch (math_type) {
       case NODE_MATH_MULTIPLY:
         v.apply_linear(make_float4(c, c, c, 1.0f), zero_float4());
@@ -672,46 +1659,187 @@ AnariValue AnariMaterialBuilder::evaluate_output(ShaderOutput *output,
         return v;
     }
   }
+
+  /* Operations which are not linear, see `apply_function`. Their other inputs have to be
+   * constant. */
   if (type == RGBRampNode::get_node_type()) {
-    /* Linear approximation of the color ramp from its first and last color. */
     RGBRampNode *ramp_node = static_cast<RGBRampNode *>(node);
-    const auto &ramp = ramp_node->get_ramp();
+    const array<packed_float3> &ramp = ramp_node->get_ramp();
     const array<float> &ramp_alpha = ramp_node->get_ramp_alpha();
-    if (ramp.empty()) {
+    if (ramp.size() < 2 || ramp_alpha.size() != ramp.size()) {
       return default_value;
     }
-    const float4 c0 = make_float4(
-        ramp[0].x, ramp[0].y, ramp[0].z, ramp_alpha.empty() ? 1.0f : ramp_alpha[0]);
-    const size_t n = ramp.size() - 1;
-    const float4 c1 = make_float4(
-        ramp[n].x, ramp[n].y, ramp[n].z, ramp_alpha.empty() ? 1.0f : ramp_alpha[n]);
+    const bool interpolate = ramp_node->get_interpolate();
+    const int size = int(ramp.size());
+    const bool alpha_output = (output_name == "Alpha");
     AnariValue fac = input("Fac", AnariValue::from_float(0.5f));
-    fac.apply_dot(make_float4(1.0f, 0.0f, 0.0f, 0.0f));
-    if (output_name == "Alpha") {
-      fac.apply_linear(make_float4(c1.w - c0.w), make_float4(c0.w));
+    const auto lookup = [&](const float4 &c) {
+      const float3 color = rgb_ramp_lookup(ramp.data(), c.x, interpolate, false, size);
+      const float alpha = float_ramp_lookup(ramp_alpha.data(), c.x, interpolate, false, size);
+      return alpha_output ? make_float4(alpha, alpha, alpha, 1.0f) :
+                            make_float4(color.x, color.y, color.z, alpha);
+    };
+    if (fac.is_constant() && fac.unknown && fac.unknown_spread > 0.0f) {
+      /* The factor is a procedural texture: the average of the ramp over the values the
+       * texture takes, at evenly spaced quantiles of a bell curve around its middle. */
+      const int num_samples = 32;
+      float4 sum = zero_float4();
+      for (int i = 0; i < num_samples; i++) {
+        const float u = (float(i) + 0.5f) / float(num_samples);
+        const float deviation = 0.5513f * logf(u / (1.0f - u));
+        const float x = saturatef(fac.constant.x + fac.unknown_spread * deviation);
+        sum += lookup(make_float4(x, x, x, 1.0f));
+      }
+      fac.constant = sum / float(num_samples);
+      fac.unknown_spread = 0.0f;
+      return fac;
     }
-    else {
-      fac.apply_linear(c1 - c0, c0);
-    }
+    apply_function(fac, lookup);
     return fac;
   }
-
-  /* Color operations which can't be expressed, pass the color through. */
-  if (type == GammaNode::get_node_type() || type == BrightContrastNode::get_node_type() ||
-      type == HSVNode::get_node_type() || type == RGBCurvesNode::get_node_type() ||
-      type == ClampNode::get_node_type() || type == MapRangeNode::get_node_type())
-  {
-    if (node->input("Color")) {
-      return input("Color", default_value);
+  if (type == RGBCurvesNode::get_node_type()) {
+    RGBCurvesNode *curves_node = static_cast<RGBCurvesNode *>(node);
+    const array<packed_float3> &curves = curves_node->get_curves();
+    AnariValue value = input("Color", default_value);
+    const float fac = input_float(node, "Fac", 1.0f);
+    const float min_x = curves_node->get_min_x();
+    const float range_x = curves_node->get_max_x() - min_x;
+    if (curves.size() < 2 || range_x == 0.0f) {
+      return value;
     }
-    if (node->input("Value")) {
-      return input("Value", default_value);
+    const bool extrapolate = curves_node->get_extrapolate();
+    const int size = int(curves.size());
+    apply_function(value, per_color([&](const float3 color) {
+                     const float3 t = (color - make_float3(min_x)) / range_x;
+                     const float3 mapped = make_float3(
+                         rgb_ramp_lookup(curves.data(), t.x, true, extrapolate, size).x,
+                         rgb_ramp_lookup(curves.data(), t.y, true, extrapolate, size).y,
+                         rgb_ramp_lookup(curves.data(), t.z, true, extrapolate, size).z);
+                     return (1.0f - fac) * color + fac * mapped;
+                   }));
+    return value;
+  }
+  if (type == FloatCurveNode::get_node_type()) {
+    FloatCurveNode *curve_node = static_cast<FloatCurveNode *>(node);
+    const array<float> &curve = curve_node->get_curve();
+    AnariValue value = input("Value", default_value);
+    const float fac = input_float(node, "Factor", 1.0f);
+    const float min_x = curve_node->get_min_x();
+    const float range_x = curve_node->get_max_x() - min_x;
+    if (curve.size() < 2 || range_x == 0.0f) {
+      return value;
     }
-    return default_value;
+    const bool extrapolate = curve_node->get_extrapolate();
+    const int size = int(curve.size());
+    apply_function(value, per_channel([&](const float x) {
+                     const float mapped = float_ramp_lookup(
+                         curve.data(), (x - min_x) / range_x, true, extrapolate, size);
+                     return (1.0f - fac) * x + fac * mapped;
+                   }));
+    return value;
+  }
+  if (type == HSVNode::get_node_type()) {
+    AnariValue value = input("Color", default_value);
+    const float hue = input_float(node, "Hue", 0.5f);
+    const float saturation = input_float(node, "Saturation", 1.0f);
+    const float brightness = input_float(node, "Value", 1.0f);
+    const float fac = input_float(node, "Fac", 1.0f);
+    if (hue == 0.5f && saturation == 1.0f) {
+      /* Only the brightness, which is linear. */
+      const float scale = 1.0f + fac * (brightness - 1.0f);
+      value.apply_linear(make_float4(scale, scale, scale, 1.0f), zero_float4());
+      return value;
+    }
+    apply_function(value, per_color([=](const float3 color) {
+                     float3 hsv = rgb_to_hsv(color);
+                     hsv.x = fractf(hsv.x + hue + 0.5f);
+                     hsv.y = saturatef(hsv.y * saturation);
+                     hsv.z *= brightness;
+                     return max(fac * hsv_to_rgb(hsv) + (1.0f - fac) * color, zero_float3());
+                   }));
+    return value;
+  }
+  if (type == GammaNode::get_node_type()) {
+    AnariValue value = input("Color", default_value);
+    const float gamma = input_float(node, "Gamma", 1.0f);
+    if (gamma != 1.0f) {
+      apply_function(value, per_color([=](const float3 color) {
+                       return svm_math_gamma_color(color, gamma);
+                     }));
+    }
+    return value;
+  }
+  if (type == BrightContrastNode::get_node_type()) {
+    AnariValue value = input("Color", default_value);
+    const float bright = input_float(node, "Bright", 0.0f);
+    const float contrast = input_float(node, "Contrast", 0.0f);
+    apply_function(value, per_color([=](const float3 color) {
+                     return svm_brightness_contrast(color, bright, contrast);
+                   }));
+    return value;
+  }
+  if (type == ClampNode::get_node_type()) {
+    AnariValue value = input("Value", default_value);
+    float low = input_float(node, "Min", 0.0f);
+    float high = input_float(node, "Max", 1.0f);
+    if (static_cast<ClampNode *>(node)->get_clamp_type() == NODE_CLAMP_RANGE && low > high) {
+      std::swap(low, high);
+    }
+    apply_function(value, per_channel([=](const float x) { return clamp(x, low, high); }));
+    return value;
+  }
+  if (type == MapRangeNode::get_node_type()) {
+    MapRangeNode *map_range = static_cast<MapRangeNode *>(node);
+    AnariValue value = input("Value", default_value);
+    const float from_min = input_float(node, "From Min", 0.0f);
+    const float from_max = input_float(node, "From Max", 1.0f);
+    const float to_min = input_float(node, "To Min", 0.0f);
+    const float to_max = input_float(node, "To Max", 1.0f);
+    const float steps = input_float(node, "Steps", 4.0f);
+    const NodeMapRangeType range_type = map_range->get_range_type();
+    if (from_max == from_min) {
+      return AnariValue::from_float(0.0f);
+    }
+    if (range_type == NODE_MAP_RANGE_LINEAR) {
+      const float scale = (to_max - to_min) / (from_max - from_min);
+      const float offset = to_min - from_min * scale;
+      value.apply_linear(make_float4(scale, scale, scale, 1.0f),
+                         make_float4(offset, offset, offset, 0.0f));
+      return value;
+    }
+    apply_function(value, per_channel([=](const float x) {
+                     float factor = (x - from_min) / (from_max - from_min);
+                     if (range_type == NODE_MAP_RANGE_STEPPED) {
+                       factor = (steps > 0.0f) ? floorf(factor * (steps + 1.0f)) / steps : 0.0f;
+                     }
+                     else {
+                       /* Smooth step and smoother step. */
+                       factor = saturatef(factor);
+                       factor = (range_type == NODE_MAP_RANGE_SMOOTHSTEP) ?
+                                    factor * factor * (3.0f - 2.0f * factor) :
+                                    factor * factor * factor *
+                                        (factor * (factor * 6.0f - 15.0f) + 10.0f);
+                     }
+                     return to_min + factor * (to_max - to_min);
+                   }));
+    return value;
   }
 
   LOG_DEBUG << "ANARI: unsupported shader node " << type->name << ", using default value";
-  return default_value;
+  AnariValue unknown = default_value;
+  unknown.unknown = true;
+  /* A noise stays close to its middle, other textures and the random numbers of objects and
+   * hair use most of their range. Not for what is nearly the same everywhere (pointiness). */
+  if (type == NoiseTextureNode::get_node_type()) {
+    unknown.unknown_spread = 0.13f;
+  }
+  else if (dynamic_cast<TextureNode *>(node) || type == HairInfoNode::get_node_type() ||
+           type == ObjectInfoNode::get_node_type())
+  {
+    unknown.unknown_spread = 0.29f;
+  }
+  lossy_ = true;
+  return unknown;
 }
 
 AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, const int depth)
@@ -730,6 +1858,15 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
   auto constant = [&](const char *name, const float def) -> float {
     return input_float(node, name, def);
   };
+  /* The base color, with a note whether something of it was left out. */
+  auto base_color = [&](const char *name, const AnariValue &def) -> AnariValue {
+    const bool was_lossy = lossy_;
+    lossy_ = false;
+    const AnariValue result = evaluate_input(node->input(name), def);
+    p.base_color_lossy = lossy_;
+    lossy_ = lossy_ || was_lossy;
+    return result;
+  };
   auto normal_map = [&](const char *name) {
     ShaderInput *in = node->input(name);
     if (in == nullptr || in->link == nullptr) {
@@ -746,15 +1883,16 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
     if (color.is_constant()) {
       return;
     }
-    /* Tangent space normal from [0, 1] color to [-1, 1] vector. */
-    color.apply_linear(make_float4(2.0f, 2.0f, 2.0f, 1.0f), make_float4(-1.0f, -1.0f, -1.0f, 0.0f));
+    /* The sampler returns the color of the normal map, with the tangent space normal encoded
+     * in [0, 1] as in the image: the devices decode it, like for the normal textures of glTF
+     * which the loader of the ANARI SDK passes on unchanged. */
     p.normal_map = color;
     p.has_normal_map = true;
   };
 
   if (type == PrincipledBsdfNode::get_node_type()) {
     p.has_bsdf = true;
-    p.base_color = value("Base Color", p.base_color);
+    p.base_color = base_color("Base Color", p.base_color);
     p.metallic = value("Metallic", p.metallic);
     p.roughness = value("Roughness", p.roughness);
     p.ior = constant("IOR", 1.5f);
@@ -802,7 +1940,7 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
     p.has_bsdf = true;
     p.is_diffuse = type == DiffuseBsdfNode::get_node_type() ||
                    type == SubsurfaceScatteringNode::get_node_type();
-    p.base_color = value("Color", p.base_color);
+    p.base_color = base_color("Color", p.base_color);
     p.roughness = AnariValue::from_float(1.0f);
     p.specular = AnariValue::from_float(0.0f);
     normal_map("Normal");
@@ -811,8 +1949,8 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
 
   if (type == GlossyBsdfNode::get_node_type() || type == MetallicBsdfNode::get_node_type()) {
     p.has_bsdf = true;
-    p.base_color = value(type == MetallicBsdfNode::get_node_type() ? "Base Color" : "Color",
-                         p.base_color);
+    p.base_color = base_color(type == MetallicBsdfNode::get_node_type() ? "Base Color" : "Color",
+                              p.base_color);
     p.metallic = AnariValue::from_float(1.0f);
     p.roughness = value("Roughness", p.roughness);
     normal_map("Normal");
@@ -821,7 +1959,7 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
 
   if (type == GlassBsdfNode::get_node_type() || type == RefractionBsdfNode::get_node_type()) {
     p.has_bsdf = true;
-    p.base_color = value("Color", AnariValue::from_float3(one_float3()));
+    p.base_color = base_color("Color", AnariValue::from_float3(one_float3()));
     p.roughness = value("Roughness", AnariValue::from_float(0.0f));
     p.ior = constant("IOR", 1.5f);
     p.transmission = AnariValue::from_float(1.0f);
@@ -850,9 +1988,16 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
   }
 
   if (type == EmissionNode::get_node_type()) {
-    const float strength = constant("Strength", 1.0f);
+    /* The strength may come from other nodes, for lights often from a Light Falloff node. A
+     * strength from a texture can't be multiplied with the color. */
+    const bool was_lossy = lossy_;
+    lossy_ = false;
+    const AnariValue strength_value = value("Strength", AnariValue::from_float(1.0f));
+    const float strength = strength_value.is_constant() ? strength_value.constant.x : 1.0f;
     p.emissive = value("Color", AnariValue::from_float3(one_float3()));
     p.emissive.apply_linear(make_float4(strength, strength, strength, 1.0f), zero_float4());
+    p.emissive_lossy = lossy_ || !strength_value.is_constant();
+    lossy_ = lossy_ || was_lossy;
     p.base_color = AnariValue::from_float3(zero_float3());
     p.specular = AnariValue::from_float(0.0f);
     p.has_emission = true;
@@ -892,9 +2037,63 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
              !c.has_emission;
     };
 
+    /* One shader for the camera and another one for the rest of the light transport: the
+     * material is what the camera sees. Half of each is neither, a glass which is clear for
+     * the other rays would nearly vanish. */
+    if (fac_input && fac_input->link &&
+        fac_input->link->parent->type == LightPathNode::get_node_type() &&
+        fac_input->link->name() == "Is Camera Ray")
+    {
+      return b;
+    }
+
+    AnariValue linked_fac = AnariValue::from_float(0.5f);
     if (fac_input && fac_input->link) {
+      linked_fac = evaluate_input(fac_input, linked_fac);
+    }
+
+    /* A diffuse and a glossy shader mixed by a Fresnel or Layer Weight node is how a dielectric
+     * was built before the Principled BSDF: mostly diffuse, glossy towards grazing angles. That
+     * is the base color of the diffuse one with the specular reflection of the material, not a
+     * half metallic blend of the two colors. The factor often passes through math nodes which
+     * set the reflectivity. */
+    if (fac_input && fac_input->link && depends_on_fresnel(fac_input->link, 0)) {
+      const auto is_glossy = [](const AnariPrincipled &c) {
+        return c.has_bsdf && c.metallic.is_constant() && c.metallic.constant.x == 1.0f &&
+               c.transmission.is_constant() && c.transmission.constant.x == 0.0f;
+      };
+      const auto is_base = [](const AnariPrincipled &c) {
+        return c.has_bsdf && c.metallic.is_constant() && c.metallic.constant.x == 0.0f;
+      };
+      /* Not over a transparent shader: that is a reflection on clear glass, which is mixed by
+       * what the factor is for a typical direction of view below. */
+      const bool over_transparent = is_transparent(a) || is_transparent(b);
+      if (!over_transparent && ((is_base(a) && is_glossy(b)) || (is_base(b) && is_glossy(a)))) {
+        const AnariPrincipled &base = is_glossy(b) ? a : b;
+        const AnariPrincipled &glossy = is_glossy(b) ? b : a;
+        AnariPrincipled r = base;
+        r.specular = AnariValue::from_float(1.0f);
+        r.roughness = glossy.roughness;
+        r.is_diffuse = false;
+        if (!r.has_normal_map && glossy.has_normal_map) {
+          r.normal_map = glossy.normal_map;
+          r.has_normal_map = true;
+        }
+        return r;
+      }
+    }
+
+    if (fac_input && fac_input->link && linked_fac.unknown && view_cosine_ < 0.0f &&
+        depends_on_fresnel(fac_input->link, 0))
+    {
+      view_cosine_ = 2.0f / 3.0f;
+      linked_fac = evaluate_input(fac_input, AnariValue::from_float(0.5f));
+      view_cosine_ = -1.0f;
+    }
+
+    if (fac_input && fac_input->link && !linked_fac.is_constant()) {
       /* Mixing with transparency driven by a texture: alpha mask. */
-      AnariValue fac = evaluate_input(fac_input, AnariValue::from_float(0.5f));
+      AnariValue fac = linked_fac;
       if (is_transparent(a) && !is_transparent(b)) {
         AnariPrincipled r = b;
         r.opacity = fac;
@@ -906,10 +2105,37 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
         r.opacity = fac;
         return r;
       }
-      return AnariPrincipled::mix(a, b, 0.5f);
+      /* A textured factor between two shaders can't be expressed: mixed by the average of the
+       * factor over the surface. A decal which covers little of a mesh leaves the other shader
+       * nearly as it is that way, where half of each would be neither of them. */
+      float4 average = make_float4(0.5f);
+      const float average_fac = average_value(fac, average) ? saturatef(average.x) : 0.5f;
+      AnariPrincipled r = AnariPrincipled::mix(a, b, average_fac);
+      r.base_color_lossy = true;
+      r.emissive_lossy = true;
+      return r;
     }
 
-    const float fac = input_float(node, "Fac", 0.5f);
+    const float fac = (fac_input && fac_input->link) ? saturatef(linked_fac.constant.x) :
+                                                       input_float(node, "Fac", 0.5f);
+
+    /* Mixing with an input which has no closure only scales the other one. */
+    const bool has_a = node->input("Closure1") && node->input("Closure1")->link;
+    const bool has_b = node->input("Closure2") && node->input("Closure2")->link;
+    if (has_a != has_b) {
+      AnariPrincipled r = has_a ? a : b;
+      const float weight = has_a ? 1.0f - fac : fac;
+      const float4 scale = make_float4(weight, weight, weight, 1.0f);
+      r.emissive.apply_linear(scale, zero_float4());
+      if (r.has_bsdf) {
+        r.base_color.apply_linear(scale, zero_float4());
+        r.specular.apply_linear(scale, zero_float4());
+      }
+      r.base_color_lossy = r.base_color_lossy || linked_fac.unknown;
+      r.emissive_lossy = r.emissive_lossy || linked_fac.unknown;
+      return r;
+    }
+
     if (is_transparent(a) && !is_transparent(b)) {
       AnariPrincipled r = b;
       r.opacity.apply_linear(make_float4(fac), zero_float4());
@@ -920,7 +2146,11 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
       r.opacity.apply_linear(make_float4(1.0f - fac), zero_float4());
       return r;
     }
-    return AnariPrincipled::mix(a, b, fac);
+    AnariPrincipled r = AnariPrincipled::mix(a, b, fac);
+    /* A factor from nodes which can't be evaluated is the default of the socket. */
+    r.base_color_lossy = r.base_color_lossy || linked_fac.unknown;
+    r.emissive_lossy = r.emissive_lossy || linked_fac.unknown;
+    return r;
   }
 
   /* Other closures: approximate with a diffuse material using their color. */
@@ -936,9 +2166,61 @@ AnariPrincipled AnariMaterialBuilder::evaluate_closure(ShaderOutput *output, con
   return p;
 }
 
+bool AnariMaterialBuilder::evaluate_mask_mix(Shader *shader, AnariPrincipled &a, AnariPrincipled &b)
+{
+  slots_ = &shader_slots_.get(shader);
+  shader_ = shader;
+  ShaderGraph *graph = shader->graph.get();
+  ShaderInput *surface = graph ? graph->output()->input("Surface") : nullptr;
+  if (surface == nullptr || surface->link == nullptr) {
+    return false;
+  }
+  ShaderNode *node = surface->link->parent;
+  if (node->type != MixClosureNode::get_node_type()) {
+    return false;
+  }
+  ShaderInput *fac = node->input("Fac");
+  ShaderInput *in_a = node->input("Closure1");
+  ShaderInput *in_b = node->input("Closure2");
+  if (fac == nullptr || fac->link == nullptr || in_a == nullptr || in_a->link == nullptr ||
+      in_b == nullptr || in_b->link == nullptr || bake_depends_on_view(fac->link))
+  {
+    return false;
+  }
+  const AnariValue factor = evaluate_input(fac, AnariValue::from_float(0.5f));
+  if (factor.is_constant() && !factor.unknown) {
+    /* A constant factor mixes the parameters exactly. */
+    return false;
+  }
+
+  a = evaluate_closure(in_a->link, 1);
+  b = evaluate_closure(in_b->link, 1);
+  const auto is_constant = [](const AnariPrincipled &p) {
+    return (p.has_bsdf || p.has_emission) && !p.has_normal_map && p.base_color.is_constant() &&
+           p.metallic.is_constant() && p.roughness.is_constant() && p.opacity.is_constant() &&
+           p.transmission.is_constant() && p.specular.is_constant() &&
+           p.specular_color.is_constant() && p.clearcoat.is_constant() &&
+           p.clearcoat_roughness.is_constant() && p.sheen_color.is_constant() &&
+           p.sheen_roughness.is_constant() && p.emissive.is_constant();
+  };
+  if (!is_constant(a) || !is_constant(b)) {
+    return false;
+  }
+  const auto is_transparent = [](const AnariPrincipled &p) {
+    return p.has_bsdf && p.opacity.constant.x == 0.0f && !p.has_emission;
+  };
+  if (!factor.is_constant() && is_transparent(a) != is_transparent(b)) {
+    /* A cutout by the alpha of an image: the image itself is the better mask. */
+    return false;
+  }
+  return true;
+}
+
 AnariPrincipled AnariMaterialBuilder::evaluate_surface(Shader *shader)
 {
   AnariPrincipled p;
+  slots_ = shader ? &shader_slots_.get(shader) : &unused_slots_;
+  shader_ = shader;
   if (shader == nullptr || !shader->graph) {
     return p;
   }
@@ -1015,6 +2297,14 @@ ANARISampler AnariMaterialBuilder::create_sampler(const AnariValue &value)
     const bool nearest = image_node && image_node->get_interpolation() == INTERPOLATION_CLOSEST;
     anariSetParameter(device, sampler, "filter", ANARI_STRING, nearest ? "nearest" : "linear");
   }
+  else if (value.type == AnariValue::ARRAY) {
+    /* A baked image: every triangle has its own cell of texels. */
+    sampler = anariNewSampler(device, "image2D");
+    anariSetParameter(device, sampler, "image", ANARI_ARRAY2D, &value.array);
+    anariSetParameter(device, sampler, "wrapMode1", ANARI_STRING, "clampToEdge");
+    anariSetParameter(device, sampler, "wrapMode2", ANARI_STRING, "clampToEdge");
+    anariSetParameter(device, sampler, "filter", ANARI_STRING, "linear");
+  }
   else if (value.type == AnariValue::ATTRIBUTE) {
     sampler = anariNewSampler(device, "transform");
   }
@@ -1070,7 +2360,41 @@ void AnariMaterialBuilder::set_value(ANARIMaterial material,
                                      const int num_components)
 {
   ANARIDevice device = device_.anari_device();
-  ANARI_TRACE("material %s (%s)", name, value.is_constant() ? "constant" : "sampler");
+  if (value.is_constant()) {
+    ANARI_TRACE("material %s (constant) %g %g %g %g",
+                name,
+                value.constant.x,
+                value.constant.y,
+                value.constant.z,
+                value.constant.w);
+  }
+  else {
+    ANARI_TRACE("material %s (sampler) %s, out %g %g %g %g | %g %g %g %g | %g %g %g %g | "
+                "%g %g %g %g + %g %g %g %g",
+                name,
+                value.type == AnariValue::IMAGE ? "image" :
+                value.type == AnariValue::ARRAY ? "baked" : value.attribute.c_str(),
+                value.out_row[0].x,
+                value.out_row[0].y,
+                value.out_row[0].z,
+                value.out_row[0].w,
+                value.out_row[1].x,
+                value.out_row[1].y,
+                value.out_row[1].z,
+                value.out_row[1].w,
+                value.out_row[2].x,
+                value.out_row[2].y,
+                value.out_row[2].z,
+                value.out_row[2].w,
+                value.out_row[3].x,
+                value.out_row[3].y,
+                value.out_row[3].z,
+                value.out_row[3].w,
+                value.out_offset.x,
+                value.out_offset.y,
+                value.out_offset.z,
+                value.out_offset.w);
+  }
 
   if (value.is_constant()) {
     switch (num_components) {
@@ -1086,6 +2410,7 @@ void AnariMaterialBuilder::set_value(ANARIMaterial material,
     }
     return;
   }
+
 
   /* Attributes without any transformation can be referenced by name directly. */
   if (value.type == AnariValue::ATTRIBUTE && out_transform_is_identity(value)) {
@@ -1278,20 +2603,37 @@ AnariMaterialBuilder::Background AnariMaterialBuilder::evaluate_background(Shade
       ShaderInput *in1 = node->input("Closure1");
       ShaderInput *in2 = node->input("Closure2");
       link = (in2 && in2->link) ? in2->link : (in1 ? in1->link : nullptr);
+      /* Only one of the mixed backgrounds is used. */
+      background.exact = false;
       continue;
     }
     link = nullptr;
   }
 
   if (link == nullptr) {
+    background.exact = (surface == nullptr || surface->link == nullptr);
     return background;
   }
 
   ShaderNode *node = link->parent;
   background.strength = input_float(node, "Strength", 1.0f);
 
+  ShaderInput *strength = node->input("Strength");
   ShaderInput *color = node->input("Color");
+  if (strength && strength->link) {
+    background.exact = false;
+  }
   if (color && color->link) {
+    /* Exact for an environment image connected to the background, nodes between them are
+     * passed through or approximated by #evaluate_output. */
+    const ShaderNode *source = color->link->parent;
+    if (source->type != EnvironmentTextureNode::get_node_type() ||
+        static_cast<const EnvironmentTextureNode *>(source)->get_projection() !=
+            NODE_ENVIRONMENT_EQUIRECTANGULAR)
+    {
+      background.exact = false;
+    }
+
     const AnariValue value = evaluate_output(color->link, AnariValue::from_float3(zero_float3()), 0);
     if (value.type == AnariValue::IMAGE &&
         value.image->type == EnvironmentTextureNode::get_node_type())
@@ -1304,9 +2646,10 @@ AnariMaterialBuilder::Background AnariMaterialBuilder::evaluate_background(Shade
       background.color = make_float3(value.constant);
     }
     else {
-      /* Unsupported procedural background (sky texture, ...), use a neutral gray. */
+      /* Procedural background (sky texture, ...): a neutral gray, unless the caller evaluates
+       * the shader. */
       background.color = make_float3(0.05f, 0.05f, 0.05f);
-      LOG_WARNING << "ANARI: unsupported world shader, using a constant background";
+      background.exact = false;
     }
   }
   else if (color) {

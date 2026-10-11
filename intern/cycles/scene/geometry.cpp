@@ -1009,8 +1009,10 @@ void GeometryManager::device_update(Device *device,
     return;
   }
 
-  /* Apply transforms, to prepare for static BVH building. */
-  if (scene->params.bvh_type == BVH_TYPE_STATIC) {
+  /* Apply transforms, to prepare for static BVH building. Not for the ANARI device: it mirrors
+   * the scene into another renderer, which needs the object transforms for object space texture
+   * coordinates and gets the winding of mirrored objects wrong otherwise. */
+  if (scene->params.bvh_type == BVH_TYPE_STATIC && device->info.type != DEVICE_ANARI) {
     const scoped_callback_timer timer([scene](double time) {
       if (scene->update_stats) {
         scene->update_stats->object.times.add_entry(

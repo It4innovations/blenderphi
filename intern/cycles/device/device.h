@@ -279,6 +279,13 @@ class Device {
    * representation (ANARI) use it to find out what changed. */
   virtual void prepare_scene_update(Scene * /*scene*/) {}
 
+  /* Whether the device takes the shader graphs of materials as MaterialX documents: the scene
+   * synchronization then stores the document in #Shader::materialx. */
+  virtual bool use_materialx_shaders() const
+  {
+    return false;
+  }
+
   /* Called after kernel texture setup, and prior to integrator state setup. */
   virtual void optimize_for_scene(Scene * /*scene*/) {}
 

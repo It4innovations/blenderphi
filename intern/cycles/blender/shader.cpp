@@ -28,6 +28,9 @@
 #include "BKE_node_runtime.hh"
 
 #include "NOD_shader.h"
+#if defined(WITH_ANARI) && defined(WITH_MATERIALX)
+#  include "NOD_shader_materialx.hh"
+#endif
 #include "NOD_shader_nodes_inline.hh"
 #include "NOD_shader_raycast.hh"
 
@@ -123,6 +126,11 @@ static ImageAlphaType get_image_alpha_type(blender::Image &b_image)
  * The prefixes include a control character to ensure the user specified
  * name can't accidentally include a special prefix.
  */
+
+/* Image texture nodes created for the material being synchronized, by image data-block. Only
+ * collected for devices which take the material as a MaterialX document: the images of the
+ * document are loaded through these nodes. */
+static map<const blender::Image *, vector<ShaderNode *>> *sync_image_nodes = nullptr;
 
 static const string_view object_attr_prefix("\x01object:");
 static const string_view instancer_attr_prefix("\x01instancer:");
@@ -979,6 +987,9 @@ static ShaderNode *add_node(Scene *scene,
             image_user_file_path(b_data, b_image_user, *b_image, b_scene.r.cfra));
         image->set_filename(filename);
       }
+      if (sync_image_nodes) {
+        (*sync_image_nodes)[b_image].push_back(image);
+      }
     }
     node = image;
   }
@@ -1016,6 +1027,9 @@ static ShaderNode *add_node(Scene *scene,
       else {
         env->set_filename(
             ustring(image_user_file_path(b_data, b_image_user, *b_image, b_scene.r.cfra)));
+      }
+      if (sync_image_nodes) {
+        (*sync_image_nodes)[b_image].push_back(env);
       }
     }
     node = env;
@@ -1745,6 +1759,12 @@ void BlenderSync::sync_materials(blender::Depsgraph &b_depsgraph,
       shader->name = BKE_id_name(b_mat.id);
       shader->set_pass_id(b_mat.index);
 
+#if defined(WITH_ANARI) && defined(WITH_MATERIALX)
+      const bool use_materialx = scene->device->use_materialx_shaders();
+      map<const blender::Image *, vector<ShaderNode *>> image_nodes;
+      sync_image_nodes = use_materialx ? &image_nodes : nullptr;
+#endif
+
       /* create nodes */
       if (b_mat.nodetree) {
         add_nodes(scene, *b_engine, *b_data, *b_scene, b_depsgraph, graph.get(), *b_mat.nodetree);
@@ -1756,6 +1776,24 @@ void BlenderSync::sync_materials(blender::Depsgraph &b_depsgraph,
         ShaderNode *out = graph->output();
         graph->connect(diffuse->output("BSDF"), out->input("Surface"));
       }
+
+#if defined(WITH_ANARI) && defined(WITH_MATERIALX)
+      /* The MaterialX document is written from the Blender node tree, not from the Cycles graph:
+       * its images are matched with the image texture nodes created above. */
+      sync_image_nodes = nullptr;
+      shader->materialx = Shader::MaterialXDocument();
+      if (use_materialx) {
+        blender::nodes::materialx::InlineDocument document;
+        if (blender::nodes::materialx::export_to_materialx_inline(&b_depsgraph, &b_mat, document))
+        {
+          shader->materialx.source = std::move(document.xml);
+          shader->materialx.material_name = std::move(document.material_name);
+          for (const auto &image : document.images) {
+            shader->materialx.images.emplace_back(image.first, image_nodes[image.second]);
+          }
+        }
+      }
+#endif
 
       resolve_view_layer_attributes(shader, graph.get(), b_depsgraph);
 

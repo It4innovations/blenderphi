@@ -13,6 +13,7 @@
 #include "DNA_material_types.h"
 
 #include "NOD_shader.h"
+#include "NOD_shader_materialx.hh"
 #include "NOD_shader_nodes_inline.hh"
 
 #include "material.h"
@@ -51,9 +52,10 @@ class DefaultMaterialNodeParser : public NodeParser {
   }
 };
 
-MaterialX::DocumentPtr export_to_materialx(const Depsgraph *depsgraph,
-                                           const Material *material,
-                                           const ExportParams &export_params)
+static MaterialX::DocumentPtr export_document(const Depsgraph *depsgraph,
+                                              const Material *material,
+                                              const ExportParams &export_params,
+                                              bool *r_has_unsupported_nodes)
 {
   CLOG_DEBUG(LOG_IO_MATERIALX, "Material: %s", material->id.name);
 
@@ -89,7 +91,72 @@ MaterialX::DocumentPtr export_to_materialx(const Depsgraph *depsgraph,
              "Material: %s\n%s",
              material->id.name,
              MaterialX::writeToXmlString(doc).c_str());
+  if (r_has_unsupported_nodes) {
+    *r_has_unsupported_nodes = graph.has_unsupported_nodes;
+  }
   return doc;
+}
+
+MaterialX::DocumentPtr export_to_materialx(const Depsgraph *depsgraph,
+                                           const Material *material,
+                                           const ExportParams &export_params)
+{
+  return export_document(depsgraph, material, export_params, nullptr);
+}
+
+bool export_to_materialx_inline(const Depsgraph *depsgraph,
+                                const Material *material,
+                                InlineDocument &r_document)
+{
+  r_document = InlineDocument();
+  if (material->nodetree == nullptr) {
+    return false;
+  }
+
+  /* The images get a placeholder as file name, which is replaced below once the names of the
+   * image nodes are known. */
+  const std::string placeholder = "image:";
+  Vector<Image *> images;
+
+  ExportParams params;
+  params.output_node_name = "material";
+  params.image_fn = [&](Main * /*bmain*/, Scene * /*scene*/, Image *image, ImageUser * /*iuser*/) {
+    images.append(image);
+    return placeholder + std::to_string(images.size() - 1);
+  };
+  /* Makes the active UV map a `texcoord` node. */
+  params.new_active_uvmap_name = "st";
+
+  bool has_unsupported_nodes = false;
+  MaterialX::DocumentPtr doc = export_document(
+      depsgraph, material, params, &has_unsupported_nodes);
+  if (has_unsupported_nodes) {
+    /* The document would render with default values where the nodes are: leave it to the
+     * caller to use another representation of the material. */
+    return false;
+  }
+
+  for (const MaterialX::NodePtr &node : doc->getNodes()) {
+    MaterialX::InputPtr file = node->getInput("file");
+    if (!file) {
+      continue;
+    }
+    const std::string value = file->getValueString();
+    if (value.compare(0, placeholder.size(), placeholder) != 0) {
+      continue;
+    }
+    const int index = atoi(value.c_str() + placeholder.size());
+    if (index < 0 || index >= images.size()) {
+      continue;
+    }
+    const std::string name = node->getName() + "/file";
+    file->setValueString(name);
+    r_document.images.emplace_back(name, images[index]);
+  }
+
+  r_document.xml = MaterialX::writeToXmlString(doc);
+  r_document.material_name = params.output_node_name;
+  return true;
 }
 
 }  // namespace blender::nodes::materialx

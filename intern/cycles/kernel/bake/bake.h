@@ -71,8 +71,9 @@ ccl_device void kernel_background_evaluate(KernelGlobals kg,
   const float3 ray_D = equirectangular_to_direction(in.u, in.v);
   const float ray_time = 0.5f;
 
-  /* Compute ray differential from resolution passed via object and prim fields. */
-  const float du = 1.0f / in.object;
+  /* Compute ray differential from resolution passed via object and prim fields. A negative
+   * width asks for the background as camera rays see it, see below. */
+  const float du = 1.0f / abs(in.object);
   const float dv = 1.0f / in.prim;
   const float3 ray_D_du = equirectangular_to_direction(in.u + du, in.v);
   const float3 ray_D_dv = equirectangular_to_direction(in.u, in.v + dv);
@@ -86,10 +87,16 @@ ccl_device void kernel_background_evaluate(KernelGlobals kg,
    * This is being evaluated for all BSDFs, so path flag does not contain a specific type.
    * However, we want to flag the ray visibility to ignore the sun in the background map. */
   ConstIntegratorBakeState state;
-  const uint32_t path_flag = PATH_RAY_EMISSION | PATH_RAY_IMPORTANCE_BAKE;
+  /* For the ANARI device, which shows the background as a backdrop image: as camera rays see
+   * it, with the sun, where the world shader tells them apart with the Light Path node. */
+  const bool is_camera = in.object < 0;
+  const PathRayVisibility path_visibility = is_camera ? PATH_RAY_VISIBILITY_CAMERA :
+                                                        PATH_RAY_VISIBILITY_NONE;
+  const uint32_t path_flag = is_camera ? uint32_t(PATH_RAY_EMISSION) :
+                                         (PATH_RAY_EMISSION | PATH_RAY_IMPORTANCE_BAKE);
   surface_shader_eval<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT &
                       ~(KERNEL_FEATURE_NODE_RAYTRACE | KERNEL_FEATURE_NODE_LIGHT_PATH)>(
-      kg, state, &sd, nullptr, PATH_RAY_VISIBILITY_NONE, path_flag);
+      kg, state, &sd, nullptr, path_visibility, path_flag);
   if (sd.runtime_flag & SR_CACHE_MISS) {
     *cache_miss = true;
   }

@@ -49,6 +49,21 @@ NODE_SHADER_MATERIALX_BEGIN
     return empty();
   }
 
+  if (to_type_ == NodeItem::Type::SurfaceOpacity) {
+    /* A linked shader without an opacity of its own (emission, diffuse) is opaque: it must not
+     * make the share of the other shader transparent. */
+    const auto is_linked = [&](const int index) {
+      const bNodeLink *link = node_->input_socket(index).link;
+      return link && link->is_used();
+    };
+    if (!shader1 && is_linked(1)) {
+      shader1 = val(1.0f);
+    }
+    if (!shader2 && is_linked(2)) {
+      shader2 = val(1.0f);
+    }
+  }
+
   /* Cycles and EEVEE clamp the factor, match that here. */
   NodeItem fac = get_input_value(0, NodeItem::Type::Float).clamp();
 

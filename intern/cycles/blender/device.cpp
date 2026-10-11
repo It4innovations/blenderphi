@@ -224,6 +224,19 @@ DeviceInfo blender_anari_device_info(blender::Scene &b_scene, const blender::Vie
   if (canari.data) {
     device_id = get_string(canari, "device_id");
     device_parameters = get_string(canari, "device_parameters");
+    /* How materials are exported is a pseudo parameter of the device, see
+     * `device/anari/device_impl.cpp`. The parameters of the user come last and override it. */
+    if (RNA_struct_find_property(&canari, "material_export") &&
+        get_enum(canari, "material_export") == 1)
+    {
+      device_parameters = "materials=physicallyBased;" + device_parameters;
+    }
+    /* The denoiser of the device itself, another pseudo parameter. Off unless asked for. */
+    if (RNA_struct_find_property(&canari, "use_device_denoiser") &&
+        get_boolean(canari, "use_device_denoiser"))
+    {
+      device_parameters = "denoise=true;" + device_parameters;
+    }
   }
 
   const vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_ANARI);

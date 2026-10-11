@@ -142,6 +142,20 @@ def checker_image(name, size=64, squares=8):
     return image
 
 
+def normal_map_image(name, size=64, stripes=4, tilt=0.6):
+    """Tangent space normal map of stripes whose normals lean to +U and to -U in turn."""
+    image = bpy.data.images.new(name, size, size, alpha=False, is_data=True)
+    z = math.sqrt(1.0 - tilt * tilt)
+    pixels = []
+    for _y in range(size):
+        for x in range(size):
+            nx = tilt if (x * stripes // size) % 2 else -tilt
+            pixels.extend((0.5 + 0.5 * nx, 0.5, 0.5 + 0.5 * z, 1.0))
+    image.pixels.foreach_set(pixels)
+    image.pack()
+    return image
+
+
 def add_mesh(name, primitive, location, material, **kwargs):
     getattr(bpy.ops.mesh, primitive)(location=location, **kwargs)
     obj = bpy.context.active_object
@@ -337,6 +351,78 @@ def relative_difference(a, b):
     numerator = sum((x - y) ** 2 for x, y in zip(a, b))
     denominator = sum(y * y for y in b) or 1e-8
     return math.sqrt(numerator / denominator)
+
+
+# --------------------------------------------------------------------
+# Shader graphs.
+#
+# Materials which only render correctly when the device evaluates the node graph: a flattened
+# physically based material has no procedural textures, bump mapping or textured shader mixes.
+
+def graph_checker(tree, bsdf):
+    """Procedural checker on the UV map."""
+    coordinates = tree.nodes.new("ShaderNodeTexCoord")
+    checker = tree.nodes.new("ShaderNodeTexChecker")
+    checker.inputs["Scale"].default_value = 6.0
+    checker.inputs["Color1"].default_value = (0.9, 0.1, 0.1, 1.0)
+    checker.inputs["Color2"].default_value = (0.1, 0.1, 0.9, 1.0)
+    tree.links.new(coordinates.outputs["UV"], checker.inputs["Vector"])
+    tree.links.new(checker.outputs["Color"], bsdf.inputs["Base Color"])
+
+
+def graph_noise_ramp(tree, bsdf):
+    """Noise on the default (generated) coordinates through a color ramp with constant steps."""
+    noise = tree.nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 3.0
+    ramp = tree.nodes.new("ShaderNodeValToRGB")
+    ramp.color_ramp.interpolation = 'CONSTANT'
+    ramp.color_ramp.elements[0].color = (0.05, 0.05, 0.05, 1.0)
+    ramp.color_ramp.elements[1].position = 0.5
+    ramp.color_ramp.elements[1].color = (0.9, 0.9, 0.9, 1.0)
+    tree.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+    tree.links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
+
+
+def graph_math(tree, bsdf):
+    """An image texture changed by math nodes which are not linear."""
+    texture = tree.nodes.new("ShaderNodeTexImage")
+    texture.image = checker_image("Checker")
+    separate = tree.nodes.new("ShaderNodeSeparateColor")
+    power = tree.nodes.new("ShaderNodeMath")
+    power.operation = 'POWER'
+    power.inputs[1].default_value = 3.0
+    sine = tree.nodes.new("ShaderNodeMath")
+    sine.operation = 'SINE'
+    tree.links.new(texture.outputs["Color"], separate.inputs["Color"])
+    tree.links.new(separate.outputs["Red"], power.inputs[0])
+    tree.links.new(power.outputs["Value"], sine.inputs[0])
+    tree.links.new(sine.outputs["Value"], bsdf.inputs["Base Color"])
+
+
+def graph_mix_shader(tree, bsdf):
+    """A diffuse and an emission shader mixed by a procedural mask."""
+    coordinates = tree.nodes.new("ShaderNodeTexCoord")
+    checker = tree.nodes.new("ShaderNodeTexChecker")
+    checker.inputs["Scale"].default_value = 4.0
+    emission = tree.nodes.new("ShaderNodeEmission")
+    emission.inputs["Color"].default_value = (0.1, 0.9, 0.1, 1.0)
+    emission.inputs["Strength"].default_value = 2.0
+    mix = tree.nodes.new("ShaderNodeMixShader")
+    output = next(node for node in tree.nodes if node.type == 'OUTPUT_MATERIAL')
+    bsdf.inputs["Base Color"].default_value = (0.8, 0.1, 0.1, 1.0)
+    tree.links.new(coordinates.outputs["UV"], checker.inputs["Vector"])
+    tree.links.new(checker.outputs["Fac"], mix.inputs["Fac"])
+    tree.links.new(bsdf.outputs["BSDF"], mix.inputs[1])
+    tree.links.new(emission.outputs["Emission"], mix.inputs[2])
+    tree.links.new(mix.outputs["Shader"], output.inputs["Surface"])
+
+
+SHADER_GRAPHS = (
+    ("checker", graph_checker),
+    ("noise_ramp", graph_noise_ramp),
+    ("math", graph_math),
+    ("mix_shader", graph_mix_shader),
+)
 
 
 # --------------------------------------------------------------------
@@ -674,6 +760,92 @@ class AnariSmokeTest(unittest.TestCase):
             self.assertGreater(ratio, 0.2, "render is much darker than Cycles")
             self.assertLess(ratio, 5.0, "render is much brighter than Cycles")
 
+    def test_normal_map(self):
+        """A normal map of stripes leaning to both sides, lit by a low sun from one side: the
+        stripes facing the sun are bright, the others dark, as in Cycles."""
+        clear_scene()
+        material = new_material("Stripes", roughness=1.0)
+        tree = material.node_tree
+        texture = tree.nodes.new("ShaderNodeTexImage")
+        texture.image = normal_map_image("Normals")
+        texture.interpolation = 'Closest'
+        normal_map = tree.nodes.new("ShaderNodeNormalMap")
+        tree.links.new(texture.outputs["Color"], normal_map.inputs["Color"])
+        bsdf = tree.nodes.get("Principled BSDF")
+        bsdf.inputs["Specular IOR Level"].default_value = 0.0
+        tree.links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
+        add_mesh("Ground", "primitive_plane_add", (0, 0, 0), material, size=4)
+        add_camera(self.scene, location=(0.0, 0.0, 5.0), target=(0.0, 0.0, 0.0), lens=50.0)
+        # The sun shines along +X, 30 degrees above the ground.
+        add_light(self.scene, 'SUN', (0, 0, 5), 3.0, rotation=(0, math.radians(-60), 0))
+        set_world_color(self.scene, (0.0, 0.0, 0.0), 0.0)
+
+        pixels, size = self.render_engine('ANARI', "normal_map")
+        reference, _ = self.render_engine('CYCLES', "normal_map")
+        mean, non_finite = image_stats(pixels)
+        reference_mean, _ = image_stats(reference)
+        self.assertEqual(non_finite, 0)
+        ratio = sum(mean) / max(sum(reference_mean), 1e-8)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        print("ANARI {:s}: normal map brightness ratio {:.3f}, relative difference {:.3f}".format(
+            args.library, ratio, difference))
+        if self.strict:
+            self.assertLess(difference, 0.2)
+
+    def test_camera_shift(self):
+        """Lens shift: the image has to move as in Cycles (camera `imageRegion`)."""
+        build_basic_scene(self.scene)
+        camera = self.scene.camera.data
+        unshifted, size = self.render_engine('CYCLES', "camera_unshifted")
+        camera.shift_x = 0.2
+        camera.shift_y = -0.15
+        pixels, _ = self.render_engine('ANARI', "camera_shift")
+        reference, _ = self.render_engine('CYCLES', "camera_shift")
+
+        _, non_finite = image_stats(pixels)
+        self.assertEqual(non_finite, 0)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        without = relative_difference(block_means(pixels, size), block_means(unshifted, size))
+        print("ANARI {:s}: lens shift relative difference {:.3f}, to the unshifted image {:.3f}".format(
+            args.library, difference, without))
+        self.assertLess(difference, without, "the lens shift of the camera is not applied")
+        if self.strict:
+            self.assertLess(difference, 0.2)
+
+    def test_camera_clip(self):
+        """Clip start: an emissive plane right in front of the camera lights the scene but is
+        not seen, as only camera rays are clipped (camera `near`)."""
+        build_basic_scene(self.scene)
+        camera = self.scene.camera
+        camera.data.clip_start = 1.0
+        material = bpy.data.materials.new("Card")
+        tree = material.node_tree
+        emission = tree.nodes.new("ShaderNodeEmission")
+        emission.inputs["Strength"].default_value = 2.0
+        output = next(n for n in tree.nodes if n.bl_idname == 'ShaderNodeOutputMaterial')
+        tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
+        card = add_mesh("Card", "primitive_plane_add", (0, 0, 0), material, size=3)
+        # 0.5 in front of the camera, facing it.
+        from mathutils import Vector
+        forward = camera.rotation_euler.to_matrix() @ Vector((0.0, 0.0, -1.0))
+        card.location = camera.location + 0.5 * forward
+        card.rotation_euler = camera.rotation_euler
+
+        pixels, size = self.render_engine('ANARI', "camera_clip")
+        reference, _ = self.render_engine('CYCLES', "camera_clip")
+        mean, non_finite = image_stats(pixels)
+        reference_mean, _ = image_stats(reference)
+        self.assertEqual(non_finite, 0)
+        ratio = sum(mean) / max(sum(reference_mean), 1e-8)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        print("ANARI {:s}: clip start brightness ratio {:.3f}, relative difference {:.3f}".format(
+            args.library, ratio, difference))
+        if self.strict:
+            self.assertLess(difference, 0.2)
+        else:
+            self.assertLess(difference, 1.0, "the clip start of the camera is not applied: "
+                            "the image shows what is in front of it")
+
     def test_texture(self):
         """A textured plane seen from above, the checker pattern has to show up."""
         clear_scene()
@@ -725,6 +897,102 @@ class AnariSmokeTest(unittest.TestCase):
                     self.assertGreater(ratio, 0.2, "light is much darker than in Cycles")
                     self.assertLess(ratio, 5.0, "light is much brighter than in Cycles")
 
+    def test_emissive_room(self):
+        """A closed room lit by nothing but an emitting plane: a path only finds the lamp by
+        chance unless the device samples emitting surfaces as lights (Cycles does, and a device
+        which declares the material parameter `emissionSampling` is asked to)."""
+        clear_scene()
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, 1.5))
+        room = bpy.context.active_object
+        room.scale = (4.0, 4.0, 3.0)
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.flip_normals()
+        bpy.ops.object.mode_set(mode='OBJECT')
+        room.data.materials.append(new_material("Wall", color=(0.7, 0.7, 0.7), roughness=1.0))
+
+        lamp = bpy.data.materials.new("Lamp")
+        tree = lamp.node_tree
+        for node in list(tree.nodes):
+            if node.type != 'OUTPUT_MATERIAL':
+                tree.nodes.remove(node)
+        emission = tree.nodes.new("ShaderNodeEmission")
+        emission.inputs["Strength"].default_value = 20.0
+        output = next(node for node in tree.nodes if node.type == 'OUTPUT_MATERIAL')
+        tree.links.new(emission.outputs["Emission"], output.inputs["Surface"])
+        add_mesh("Lamp", "primitive_plane_add", (0.0, 0.0, 2.2), lamp, size=1.0)
+
+        add_camera(self.scene, location=(0.0, -1.9, 1.5), target=(0.0, 0.0, 1.5), lens=14.0)
+        set_world_color(self.scene, (0.0, 0.0, 0.0), 0.0)
+
+        pixels, size = self.render_engine('ANARI', "emissive_room")
+        mean, non_finite = image_stats(pixels)
+        self.assertEqual(non_finite, 0)
+        self.assertGreater(sum(mean), 1e-3, "the lamp does not light the room")
+
+        reference, _ = self.render_engine('CYCLES', "emissive_room")
+        reference_mean, _ = image_stats(reference)
+        ratio = sum(mean) / max(sum(reference_mean), 1e-8)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        print("ANARI {:s}: emissive room brightness ratio {:.3f}, relative difference {:.3f}".format(
+            args.library, ratio, difference))
+        if self.strict:
+            self.assertLess(difference, 0.25)
+        else:
+            self.assertGreater(ratio, 0.2, "the room is much darker than in Cycles")
+            self.assertLess(ratio, 5.0, "the room is much brighter than in Cycles")
+
+    def test_light_falloff(self):
+        """An area light whose node tree fades its emission out over the first two meters of
+        the ray, as the lights of "Monster Under The Bed" do: the floor is lit under the light
+        and dark further out. A device takes that as a ramp over the distance when it declares
+        `falloff.distance` on lights; the others get the light with its average emission."""
+        clear_scene()
+        material = new_material("Floor", color=(0.8, 0.8, 0.8), roughness=1.0)
+        add_mesh("Floor", "primitive_grid_add", (0.0, 0.0, 0.0), material, size=8.0,
+                 x_subdivisions=32, y_subdivisions=32)
+
+        light = add_light(self.scene, 'AREA', (0.0, 0.0, 1.2), 8.0, size=1.0)
+        data = light.data
+        data.shape = 'DISK'
+        data.use_nodes = True
+        tree = data.node_tree
+        emission = next(node for node in tree.nodes if node.type == 'EMISSION')
+        emission.inputs["Strength"].default_value = 12.0
+        path = tree.nodes.new("ShaderNodeLightPath")
+        divide = tree.nodes.new("ShaderNodeMath")
+        divide.operation = 'DIVIDE'
+        divide.inputs[1].default_value = 2.0
+        tree.links.new(path.outputs["Ray Length"], divide.inputs[0])
+        fade = tree.nodes.new("ShaderNodeMapRange")
+        fade.interpolation_type = 'SMOOTHERSTEP'
+        tree.links.new(divide.outputs[0], fade.inputs["Value"])
+        mix = tree.nodes.new("ShaderNodeMixShader")
+        tree.links.new(fade.outputs["Result"], mix.inputs[0])
+        tree.links.new(emission.outputs[0], mix.inputs[1])
+        output = next(node for node in tree.nodes if node.type == 'OUTPUT_LIGHT')
+        tree.links.new(mix.outputs[0], output.inputs["Surface"])
+        light.visible_camera = False
+
+        add_camera(self.scene, location=(0.0, 0.0, 9.0), target=(0.0, 0.0, 0.0), lens=35.0)
+        set_world_color(self.scene, (0.0, 0.0, 0.0), 0.0)
+
+        pixels, size = self.render_engine('ANARI', "light_falloff")
+        mean, non_finite = image_stats(pixels)
+        self.assertEqual(non_finite, 0)
+        self.assertGreater(sum(mean), 1e-4, "the light does not light the floor")
+
+        reference, _ = self.render_engine('CYCLES', "light_falloff")
+        reference_mean, _ = image_stats(reference)
+        ratio = sum(mean) / max(sum(reference_mean), 1e-8)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        print("ANARI {:s}: light falloff brightness ratio {:.3f}, relative difference {:.3f}".format(
+            args.library, ratio, difference))
+        if self.strict:
+            self.assertLess(difference, 0.25)
+        else:
+            self.assertGreater(ratio, 0.1, "the floor is much darker than in Cycles")
+            self.assertLess(ratio, 10.0, "the floor is much brighter than in Cycles")
+
     def test_texture_mapping(self):
         """A texture scaled and rotated by a mapping node matches the Cycles render."""
         clear_scene()
@@ -748,6 +1016,30 @@ class AnariSmokeTest(unittest.TestCase):
         print("ANARI {:s}: texture mapping pattern agreement {:.3f}".format(
             args.library, agreement))
         self.assertGreater(agreement, 0.9 if self.strict else 0.75)
+
+    def test_shader_graph(self):
+        """Materials which need the node graph match Cycles on devices which evaluate it. The
+        other devices get a flattened material: for them the difference is only reported."""
+        for name, build in SHADER_GRAPHS:
+            with self.subTest(graph=name):
+                clear_scene()
+                material = new_material("Graph_" + name, roughness=1.0)
+                tree = material.node_tree
+                build(tree, tree.nodes.get("Principled BSDF"))
+                add_mesh("Ground", "primitive_plane_add", (0, 0, 0), material, size=4)
+                add_camera(self.scene, location=(0.0, 0.0, 5.0), target=(0.0, 0.0, 0.0), lens=50.0)
+                set_world_color(self.scene, (1.0, 1.0, 1.0), 1.0)
+
+                pixels, size = self.render_engine('ANARI', "graph_" + name)
+                reference, _ = self.render_engine('CYCLES', "graph_" + name)
+                mean, non_finite = image_stats(pixels)
+                self.assertEqual(non_finite, 0)
+                difference = relative_difference(block_means(pixels, size, 4),
+                                                 block_means(reference, size, 4))
+                print("ANARI {:s}: shader graph {:s} relative difference {:.3f}".format(
+                    args.library, name, difference))
+                if self.strict:
+                    self.assertLess(difference, 0.1)
 
     def test_environment_map(self):
         """An environment image lights the scene and shows up in the background, also when
@@ -784,6 +1076,86 @@ class AnariSmokeTest(unittest.TestCase):
                     self.assertGreater(ratio, 0.5)
                     self.assertLess(ratio, 2.0)
                     self.assertGreater(agreement, 0.8, "environment is oriented differently")
+
+    def test_world_camera_ray(self):
+        """A world which camera rays see darker than the rays which light the scene (Mix Shader
+        by Light Path *Is Camera Ray*): the backdrop is not the environment light."""
+        clear_scene()
+        image = environment_image("Environment")
+        add_mesh("Sphere", "primitive_uv_sphere_add", (-3.0, 0.0, 0.0),
+                 new_material("White", color=(0.8, 0.8, 0.8), roughness=1.0), radius=0.7)
+        bpy.ops.object.shade_smooth()
+        add_camera(self.scene, location=(0.0, 0.0, 0.0), target=(-1.0, 0.0, 0.0), lens=20.0)
+        self.scene.world = bpy.data.worlds.new("World")
+        self.scene.world.use_nodes = True
+        texture = set_world_environment(self.scene, image, 1.0)
+        tree = self.scene.world.node_tree
+        light = tree.nodes.get("Background")
+        backdrop = tree.nodes.new("ShaderNodeBackground")
+        backdrop.inputs["Strength"].default_value = 0.2
+        tree.links.new(texture.outputs["Color"], backdrop.inputs["Color"])
+        light_path = tree.nodes.new("ShaderNodeLightPath")
+        mix = tree.nodes.new("ShaderNodeMixShader")
+        tree.links.new(light_path.outputs["Is Camera Ray"], mix.inputs[0])
+        tree.links.new(light.outputs["Background"], mix.inputs[1])
+        tree.links.new(backdrop.outputs["Background"], mix.inputs[2])
+        output = next(n for n in tree.nodes if n.bl_idname == 'ShaderNodeOutputWorld')
+        tree.links.new(mix.outputs["Shader"], output.inputs["Surface"])
+
+        pixels, size = self.render_engine('ANARI', "world_camera_ray")
+        reference, _ = self.render_engine('CYCLES', "world_camera_ray")
+        mean, non_finite = image_stats(pixels)
+        reference_mean, _ = image_stats(reference)
+        self.assertEqual(non_finite, 0)
+        ratio = sum(mean) / max(sum(reference_mean), 1e-8)
+        difference = relative_difference(block_means(pixels, size), block_means(reference, size))
+        agreement = pattern_agreement(pixels, reference, size)
+        print("ANARI {:s}: world for camera rays: brightness ratio {:.3f}, relative difference "
+              "{:.3f}, pattern agreement {:.3f}".format(args.library, ratio, difference, agreement))
+        if self.strict:
+            self.assertLess(difference, 0.1)
+        else:
+            # The backdrop is five times darker than the light: most of the image shows it.
+            self.assertLess(ratio, 2.0, "camera rays see the world which lights the scene")
+            self.assertGreater(agreement, 0.8, "the backdrop is oriented differently")
+
+    def test_device_denoiser(self):
+        """The denoiser of the device is off by default and can be turned on in the scene
+        settings. Devices without one render the same image either way."""
+        build_basic_scene(self.scene)
+        settings = self.scene.anari
+        self.assertFalse(settings.use_device_denoiser, "the device denoiser has to be off by default")
+
+        def noise(pixels, size):
+            # Mean absolute difference of horizontally adjacent pixels.
+            width, height = size
+            total = 0.0
+            for y in range(height):
+                row = y * width * 4
+                for x in range(width - 1):
+                    i = row + x * 4
+                    total += abs(pixels[i] - pixels[i + 4]) + abs(pixels[i + 1] - pixels[i + 5]) + \
+                        abs(pixels[i + 2] - pixels[i + 6])
+            return total / (3.0 * (width - 1) * height)
+
+        # Few samples, so that there is noise to remove. The setup of a render takes the number
+        # from the arguments.
+        samples = args.samples
+        try:
+            args.samples = 4
+            pixels, size = self.render_engine('ANARI', "denoiser_off")
+            settings.use_device_denoiser = True
+            denoised, _ = self.render_engine('ANARI', "denoiser_on")
+        finally:
+            settings.use_device_denoiser = False
+            args.samples = samples
+
+        _, non_finite = image_stats(denoised)
+        self.assertEqual(non_finite, 0)
+        noise_off = noise(pixels, size)
+        noise_on = noise(denoised, size)
+        print("ANARI {:s}: device denoiser: noise {:.4f} off, {:.4f} on (ratio {:.2f})".format(
+            args.library, noise_off, noise_on, noise_on / max(noise_off, 1e-8)))
 
     def test_background(self):
         """The world color is the visible background, and changing it, its strength or making

@@ -40,12 +40,6 @@ bool ShaderEval::eval(const ShaderEvalType type,
     }
     first_device = false;
 
-    /* Devices without Cycles kernels can't evaluate shaders. */
-    if (device->info.type == DEVICE_ANARI) {
-      success = false;
-      return;
-    }
-
     device_vector<KernelShaderEvalInput> input(device, "ShaderEval input", MEM_READ_ONLY);
     device_vector<float> output(device, "ShaderEval output", MEM_READ_WRITE);
 
@@ -64,8 +58,9 @@ bool ShaderEval::eval(const ShaderEvalType type,
     output.alloc(num_points * num_channels);
     output.zero_to_device();
 
-    /* Evaluate on CPU or GPU. */
-    success = (device->info.type == DEVICE_CPU) ?
+    /* Evaluate on CPU or GPU. The ANARI device has the scene in host memory and evaluates
+     * shaders with the CPU kernels. */
+    success = (device->info.type == DEVICE_CPU || device->info.type == DEVICE_ANARI) ?
                   eval_cpu(device, type, input, output, num_points) :
                   eval_gpu(device, type, input, output, num_points);
 

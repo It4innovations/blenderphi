@@ -240,11 +240,17 @@ NodeItem NodeParser::get_input_link(const bNodeSocket &socket,
               "Unsupported node: %s [%d]",
               from_node->name,
               from_node->typeinfo->type_legacy);
+    graph_.has_unsupported_nodes = true;
     return empty();
   }
 
   NodeParserData data = {graph_, to_type, group_parser_, empty()};
   from_node->typeinfo->materialx_fn(&data, const_cast<bNode *>(from_node), link->fromsock);
+  if (!data.result && (to_type == NodeItem::Type::Any || NodeItem::is_arithmetic(to_type))) {
+    /* The node is not implemented for this output (shader types can be empty for other
+     * reasons, a BSDF node has no EDF for example). */
+    graph_.has_unsupported_nodes = true;
+  }
   return data.result;
 }
 

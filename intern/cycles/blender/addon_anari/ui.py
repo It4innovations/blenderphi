@@ -58,6 +58,8 @@ def draw_device(self, context):
     col = layout.column()
     col.prop(settings, "device")
     col.prop(settings, "device_parameters", text="Parameters")
+    col.prop(settings, "material_export")
+    col.prop(settings, "use_device_denoiser")
 
 
 class VIEW3D_OT_anari_local_render_device(Operator):

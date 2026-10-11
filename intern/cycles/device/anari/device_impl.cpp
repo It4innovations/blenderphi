@@ -22,8 +22,14 @@ namespace {
 /* Parse a list of "name=value" device parameters separated by ';' or newlines. The type of the
  * value is guessed: booleans, integers, floats and otherwise strings. */
 /* Set the parameters of the device, given as name=value pairs. The pseudo parameter "renderer"
- * selects the subtype of the renderer instead. */
-void set_device_parameters(ANARIDevice device, const string &parameters, string &renderer_subtype)
+ * selects the subtype of the renderer instead, "materials" how materials are exported ("auto"
+ * sends shader graphs to devices which take them, "physicallyBased" always flattens), and
+ * "denoise" whether the denoiser of the renderer of the device is used. */
+void set_device_parameters(ANARIDevice device,
+                           const string &parameters,
+                           string &renderer_subtype,
+                           bool &use_graph_materials,
+                           bool &use_device_denoiser)
 {
   vector<string> items;
   string_split(items, parameters, ";\n", true);
@@ -39,6 +45,14 @@ void set_device_parameters(ANARIDevice device, const string &parameters, string 
     }
     if (name == "renderer") {
       renderer_subtype = value;
+      continue;
+    }
+    if (name == "materials") {
+      use_graph_materials = (value != "physicallyBased");
+      continue;
+    }
+    if (name == "denoise") {
+      use_device_denoiser = (value == "true" || value == "1");
       continue;
     }
 
@@ -79,7 +93,7 @@ AnariDevice::AnariDevice(const DeviceInfo &info_,
                          Stats &stats_,
                          Profiler &profiler_,
                          bool headless_)
-    : Device(info_, stats_, profiler_, headless_)
+    : CPUDevice(info_, stats_, profiler_, headless_)
 {
   library_short_name_ = info.anari_library.substr(0, info.anari_library.find(','));
 
@@ -114,9 +128,14 @@ AnariDevice::AnariDevice(const DeviceInfo &info_,
 
   /* Parameters for specific back-ends, configured by the user. */
   if (const char *env_parameters = getenv("CYCLES_ANARI_DEVICE_PARAMETERS")) {
-    set_device_parameters(device_, env_parameters, renderer_subtype_);
+    set_device_parameters(
+        device_, env_parameters, renderer_subtype_, use_graph_materials_, use_device_denoiser_);
   }
-  set_device_parameters(device_, info.anari_device_parameters, renderer_subtype_);
+  set_device_parameters(device_,
+                        info.anari_device_parameters,
+                        renderer_subtype_,
+                        use_graph_materials_,
+                        use_device_denoiser_);
 
   ANARI_TRACE("commit device");
   anariCommitParameters(device_, device_);
@@ -147,6 +166,19 @@ AnariDevice::AnariDevice(const DeviceInfo &info_,
 
 AnariDevice::~AnariDevice()
 {
+  if (timed_frames_ > 0) {
+    const int later_frames = max(timed_frames_ - 1, 1);
+    ANARI_TRACE("timing %s: first frame %.3f s in the device (of which the device reports "
+                "%.3f s); %d later frames %.1f ms each in the device (of which the device "
+                "reports %.1f ms); mapping channels %.3f s in total",
+                library_short_name_.c_str(),
+                time_first_render_,
+                double(time_first_device_),
+                timed_frames_ - 1,
+                1000.0 * time_render_ / later_frames,
+                1000.0 * time_device_ / later_frames,
+                time_map_);
+  }
   if (device_) {
     if (frame_mapped_) {
       frame_unmap();
@@ -212,6 +244,19 @@ bool AnariDevice::has_subtype(ANARIDataType type, const char *subtype) const
   return false;
 }
 
+bool AnariDevice::has_parameter(ANARIDataType type,
+                                const char *subtype,
+                                const char *name,
+                                ANARIDataType parameter_type) const
+{
+  if (!device_) {
+    return false;
+  }
+  return anariGetParameterInfo(
+             device_, type, subtype, name, parameter_type, "description", ANARI_STRING) !=
+         nullptr;
+}
+
 /* --------------------------------------------------------------------
  * Device.
  */
@@ -225,8 +270,6 @@ BVHLayoutMask AnariDevice::get_bvh_layout_mask(uint64_t /*kernel_features*/) con
 
 void AnariDevice::build_bvh(BVH * /*bvh*/, Progress & /*progress*/, bool /*refit*/) {}
 
-void AnariDevice::const_copy_to(const char * /*name*/, void * /*host*/, const size_t /*size*/) {}
-
 bool AnariDevice::load_kernels(const uint64_t /*kernel_features*/)
 {
   return device_ != nullptr && !have_error();
@@ -237,6 +280,11 @@ void AnariDevice::prepare_scene_update(Scene *scene)
   if (scene_) {
     scene_->prepare_update(scene);
   }
+}
+
+bool AnariDevice::use_materialx_shaders() const
+{
+  return scene_ && scene_->graph_format() == ANARI_GRAPH_MATERIALX;
 }
 
 void AnariDevice::optimize_for_scene(Scene *scene)
@@ -254,114 +302,31 @@ void AnariDevice::optimize_for_scene(Scene *scene)
  * All data lives in host memory, the scene export reads it from there.
  */
 
-void AnariDevice::mem_alloc(device_memory &mem)
-{
-  if (mem.type == MEM_IMAGE_TEXTURE) {
-    assert(!"mem_alloc not supported for images.");
-    return;
-  }
-  if (mem.type == MEM_GLOBAL) {
-    assert(!"mem_alloc not supported for global memory.");
-    return;
-  }
-
-  if (mem.type == MEM_DEVICE_ONLY) {
-    void *data = util_aligned_malloc(mem.memory_size(), MIN_ALIGNMENT_DEVICE_MEMORY);
-    mem.device_pointer = (device_ptr)data;
-  }
-  else {
-    mem.device_pointer = (device_ptr)mem.host_pointer;
-  }
-
-  mem.device_size = mem.memory_size();
-  stats.mem_alloc(mem.device_size);
-}
-
 void AnariDevice::mem_copy_to(device_memory &mem)
 {
-  if (mem.type == MEM_GLOBAL) {
-    if (mem.device_pointer) {
-      stats.mem_free(mem.device_size);
-    }
-    mem.device_pointer = (device_ptr)mem.host_pointer;
-    mem.device_size = mem.memory_size();
-    stats.mem_alloc(mem.device_size);
-  }
-  else if (mem.type == MEM_IMAGE_TEXTURE) {
-    image_free((device_image &)mem);
-    image_alloc((device_image &)mem);
-  }
-  else if (!mem.device_pointer) {
-    mem_alloc(mem);
-  }
-}
+  CPUDevice::mem_copy_to(mem);
 
-void AnariDevice::mem_move_to_host(device_memory & /*mem*/) {}
-
-void AnariDevice::mem_copy_from(
-    device_memory & /*mem*/, size_t /*y*/, size_t /*w*/, size_t /*h*/, size_t /*elem*/)
-{
-}
-
-void AnariDevice::mem_zero(device_memory &mem)
-{
-  if (!mem.device_pointer) {
-    mem_alloc(mem);
-  }
-  if (mem.device_pointer) {
-    memset((void *)mem.device_pointer, 0, mem.memory_size());
+  if (mem.type == MEM_IMAGE_TEXTURE) {
+    const device_image &image_mem = (device_image &)mem;
+    const thread_scoped_lock lock(images_mutex_);
+    AnariImage &image = images_[image_mem.image_info_id];
+    image.pixels = mem.host_pointer;
+    image.data_type = ImageDataType(image_mem.info.data_type);
+    image.width = int(mem.data_width);
+    image.height = int(max(mem.data_height, size_t(1)));
+    image.version = ++image_version_;
   }
 }
 
 void AnariDevice::mem_free(device_memory &mem)
 {
-  if (mem.type == MEM_IMAGE_TEXTURE) {
-    image_free((device_image &)mem);
-  }
-  else if (mem.device_pointer) {
-    if (mem.type == MEM_DEVICE_ONLY) {
-      util_aligned_free((void *)mem.device_pointer, mem.memory_size());
-    }
-    mem.device_pointer = 0;
-    stats.mem_free(mem.device_size);
-    mem.device_size = 0;
-  }
-}
-
-device_ptr AnariDevice::mem_alloc_sub_ptr(device_memory &mem,
-                                          const size_t offset,
-                                          size_t /*size*/)
-{
-  return (device_ptr)(((char *)mem.device_pointer) + mem.memory_elements_size(offset));
-}
-
-void AnariDevice::image_alloc(device_image &mem)
-{
-  mem.device_pointer = (device_ptr)mem.host_pointer;
-  mem.device_size = mem.memory_size();
-  stats.mem_alloc(mem.device_size);
-
-  const thread_scoped_lock lock(images_mutex_);
-  AnariImage &image = images_[mem.image_info_id];
-  image.pixels = mem.host_pointer;
-  image.data_type = ImageDataType(mem.info.data_type);
-  image.width = int(mem.data_width);
-  image.height = int(max(mem.data_height, size_t(1)));
-  image.version = ++image_version_;
-}
-
-void AnariDevice::image_free(device_image &mem)
-{
-  if (mem.device_pointer) {
-    mem.device_pointer = 0;
-    stats.mem_free(mem.device_size);
-    mem.device_size = 0;
-
+  if (mem.type == MEM_IMAGE_TEXTURE && mem.device_pointer) {
     const thread_scoped_lock lock(images_mutex_);
-    images_.erase(mem.image_info_id);
+    images_.erase(((device_image &)mem).image_info_id);
   }
-}
 
+  CPUDevice::mem_free(mem);
+}
 const AnariImage *AnariDevice::find_image(uint image_info_id) const
 {
   const thread_scoped_lock lock(images_mutex_);
@@ -434,9 +399,29 @@ bool AnariDevice::frame_render()
   }
 
   ANARI_TRACE("render frame");
+  const double start_time = time_dt();
   anariRenderFrame(device_, frame_);
   anariFrameReady(device_, frame_, ANARI_WAIT);
   frame_num_samples_++;
+
+  /* Where the time of a render goes, for the trace: in the device, of which the device
+   * reports the part it measured itself, or in fetching the image. */
+  const double seconds = time_dt() - start_time;
+  float duration = 0.0f;
+  if (anari_trace_enabled()) {
+    anariGetProperty(
+        device_, frame_, "duration", ANARI_FLOAT32, &duration, sizeof(duration), ANARI_WAIT);
+  }
+  if (timed_frames_ == 0) {
+    /* The first frame builds the acceleration structures and compiles kernels. */
+    time_first_render_ = seconds;
+    time_first_device_ = duration;
+  }
+  else {
+    time_render_ += seconds;
+    time_device_ += duration;
+  }
+  timed_frames_++;
   return !have_error();
 }
 
@@ -455,7 +440,9 @@ AnariMappedFrame AnariDevice::frame_map()
     uint32_t width = 0;
     uint32_t height = 0;
     ANARIDataType type = ANARI_UNKNOWN;
+    const double start_time = time_dt();
     const void *data = anariMapFrame(device_, frame_, name, &width, &height, &type);
+    time_map_ += time_dt() - start_time;
     if (data && (int(width) != frame_window_.width || int(height) != frame_window_.height ||
                  type != expected_type))
     {

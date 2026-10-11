@@ -30,6 +30,8 @@ struct NodeGraph {
   const Depsgraph *depsgraph = nullptr;
   const Material *material = nullptr;
   const ExportParams &export_params;
+  /* A linked node has no MaterialX form: the default value of the socket was used instead. */
+  bool has_unsupported_nodes = false;
 
   NodeGraph(const Depsgraph *depsgraph,
             const Material *material,

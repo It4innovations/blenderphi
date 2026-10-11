@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import bpy
 from bpy.props import (
+    BoolProperty,
     EnumProperty,
     PointerProperty,
     StringProperty,
@@ -157,6 +158,33 @@ class ANARISceneSettings(bpy.types.PropertyGroup):
             "for example \"mitsuba.variant=cuda_ad_rgb\" or \"cudaDevice=0\""
         ),
         default="",
+        update=_device_update,
+    )
+    material_export: EnumProperty(
+        name="Materials",
+        description=(
+            "How materials are sent to the ANARI device: as the shader node graph, "
+            "or flattened to one physically based material"
+        ),
+        items=(
+            ('AUTO', "Shader Graph",
+             "Send the shader node graph to devices which can evaluate it. Devices which "
+             "can't, and graphs a device rejects, get the flattened material", 0),
+            ('PHYSICALLY_BASED', "Flattened",
+             "Always convert the shader nodes to one physically based material, also on "
+             "devices which could evaluate the graph", 1),
+        ),
+        default='AUTO',
+        update=_device_update,
+    )
+    use_device_denoiser: BoolProperty(
+        name="Device Denoiser",
+        description=(
+            "Denoise with the denoiser built into the ANARI device, on devices which have one "
+            "(the 'denoise' parameter of their renderer). Independent of the denoising "
+            "settings of the render, which Blender applies itself"
+        ),
+        default=False,
         update=_device_update,
     )
 

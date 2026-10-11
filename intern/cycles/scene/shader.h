@@ -24,6 +24,7 @@
 #include "util/thread.h"
 #include "util/types.h"
 #include "util/unique_ptr.h"
+#include "util/vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -33,6 +34,7 @@ class Mesh;
 class Progress;
 class Scene;
 class ShaderGraph;
+class ShaderNode;
 struct float3;
 
 enum ShadingSystem { SHADINGSYSTEM_OSL, SHADINGSYSTEM_SVM };
@@ -74,6 +76,18 @@ class Shader : public Node {
 
   /* shader graph */
   unique_ptr<ShaderGraph> graph;
+
+  /* MaterialX document of the material, for devices which render the scene themselves and take
+   * shader graphs in this form, see #Device::use_materialx_shaders. Empty when not exported. */
+  struct MaterialXDocument {
+    string source;
+    /* Name of the material node in the document. */
+    string material_name;
+    /* Images of the document, by the name the document uses for them, with the image texture
+     * nodes of the graph which load the same image. Nodes may have been removed from the graph
+     * when it was simplified: check that they are still in it. */
+    vector<std::pair<string, vector<ShaderNode *>>> images;
+  } materialx;
 
   NODE_SOCKET_API(int, pass_id)
 

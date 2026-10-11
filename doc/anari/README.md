@@ -22,6 +22,12 @@ back-end. Any ANARI library can be used. The ones built and tested here are:
 Everything described here was built and tested on Windows 11 with Visual Studio 2022, in
 one workspace directory (`F:\work\anari`). Nothing is installed outside of it.
 
+The same stack on the other platforms, with what differs and what does not work there:
+[MACOS.md](MACOS.md) (Apple M4: cyclesphi-anari on Metal, Mitsuba on Metal, the CPU devices)
+and [LINUX.md](LINUX.md) (Rocky Linux 10 with two RTX PRO 6000 Blackwell, headless Blender).
+How materials, lights and geometry are translated for each device is in
+[MATERIALS.md](MATERIALS.md), the open items in [TODO.md](TODO.md).
+
 Contents:
 
 1. [How it works](#1-how-it-works)
@@ -44,6 +50,10 @@ Contents:
   * `material.cpp` (`AnariMaterialBuilder`) turns Cycles shader graphs into ANARI materials
     and samplers (`physicallyBased` or `matte`, with image textures, mapping, vertex colors
     and constants) and volume shaders into volume parameters.
+  * `graph_xml.cpp`, `graph_materialx.cpp` and `graph_rdla.cpp` send the whole shader graph
+    as text to the devices which evaluate graphs (cyclesphi-anari, RadeonProRenderANARI,
+    openmoonray-anari), see [MATERIALS.md](MATERIALS.md#5-shader-graphs-as-text) and
+    [TODO.md](TODO.md).
 * `intern/cycles/integrator/path_trace_work_anari.cpp` replaces the Cycles path tracing work
   for the ANARI device. It renders ANARI frames and copies the color, depth, normal, albedo
   and id channels into the Cycles render buffers. Cycles film conversion, passes and the
@@ -280,6 +290,23 @@ loaded into the Blender process, so MoonRay must use the same one.
    cd openmoonray-anari
    & .\scripts\dev-shell-build.ps1 -Command $cmd
    ```
+
+   The DWA materials and the pattern maps are in moonshine, which is built on top of the
+   MoonRay core (about 35 minutes). The shader graph export needs them:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File openmoonray-anari\scripts\build-moonray-windows.ps1 `
+     -Target moonshine -Xpu `
+     -OpenVdbRoot F:\work\anari\blenderphi\lib\windows_x64\openvdb `
+     -BuildRoot F:\work\anari\build\moonray-core
+   ```
+
+   The device repository has one shader of its own, `AnariBumpNormalMap` in `dso/` (a
+   normal map from a height, for the Bump node and for displacement used as bump; moonshine
+   has none). It is built after moonshine with the same script and the same arguments but
+   `-Target anari_dso`, and lands in the same `rdl2dso` directory. Without it every material
+   with a bump shows MoonRay's error material. The device itself needs nothing of Blender
+   or Cycles to build.
 
 3. **Stage the runtime** into `install/moonray`:
 
@@ -532,16 +559,31 @@ files changed, also run `cmake --install`.
    | mitsuba | `mitsuba.variant=cuda_ad_rgb\|llvm_ad_rgb\|scalar_rgb` |
 | moonray | `moonray.executionMode=auto\|scalar\|vectorized\|xpu` |
    | rpr | `computeDevice=gpu\|cpu\|gpu+cpu`, `gpuIndex=<n>` |
-   | all | `renderer=<subtype>`: a pseudo parameter that selects the ANARI renderer subtype instead of `default` |
+   | all | `renderer=<subtype>`: a pseudo parameter that selects the ANARI renderer subtype instead of `default`; `denoise=true`: the denoiser of the device, see below |
 
-4. **Samples, bounces, filter, film transparency and the world** are taken from the usual
+4. **Materials** (Render Properties, below the device) switches between the two ways
+   materials are sent. *Shader Graph* (the default) sends the shader node graph to devices
+   which evaluate it (cycles, rpr, moonray) and the flattened material to the others.
+   *Flattened* always converts the nodes to one physically based material, also on devices
+   which take graphs; the device parameter `materials=physicallyBased` does the same.
+
+5. **Device Denoiser** (Render Properties) turns on the denoiser built into the renderer of
+   the device, on devices which have one (the `denoise` parameter of the renderer: barney,
+   VisRTX, OSPRay, cyclesphi-anari). It is off by default; the device parameter
+   `denoise=true` does the same. It is independent of the *Denoise* settings of the render,
+   which Blender applies itself to the image the device returns.
+
+6. **Samples, bounces, filter, film transparency and the world** are taken from the usual
    Cycles settings.
 
 Environment variables:
 
 | Variable | Effect |
 |---|---|
-| `CYCLES_ANARI_TRACE=1` | Trace the ANARI scene sync (Blender side) |
+| `CYCLES_ANARI_TRACE=1` | Trace the ANARI scene sync (Blender side); at the end of a render also the time of the first and of the later frames inside the device, what the device reports of it (`duration` of the frame) and the time spent fetching the image |
+| `CYCLES_ANARI_GRAPH_DUMP=<directory>` | Write the text of every exported shader graph to a file |
+| `CYCLES_ANARI_GRAPH_FORMAT=cyclesXml\|materialx\|rdla` | Force a shader graph format, also on a device which does not take it (debugging) |
+| `OPENMOONRAY_ANARI_TEXTURE_FILES=1` | MoonRay: write images to scratch texture files instead of serving them from memory |
 | `ANARI_CYCLES_LOG_LEVEL=info\|debug\|trace` | Cycles log level inside cyclesphi-anari |
 | `ANARI_CYCLES_FORCE_CPU=1`, `CYCLES_ANARI_USE_GPU=OPTIX` | Override cyclesphi-anari's compute device |
 | `ANARI_MITSUBA_VARIANT` | Default Mitsuba variant |
@@ -570,8 +612,14 @@ build\blender\bin\Release\blender.exe --background --factory-startup -noaudio ^
 | `test_basic_render` | A lit Principled BSDF scene is not black, has no NaNs, and is close to Cycles |
 | `test_texture` | An image texture shows its red and blue checker squares |
 | `test_texture_mapping` | A texture scaled and rotated by a mapping node matches Cycles |
+| `test_shader_graph` | Materials which need the node graph (procedural textures, math, a Mix Shader with a mask) match Cycles on cyclesphi-anari; for the other devices the difference is printed. Not part of the results in section 7 |
 | `test_lights` | Point, spot, area and sun light each light the scene like in Cycles |
+| `test_normal_map` | A tangent space normal map of stripes, lit from the side, shades like in Cycles; for devices other than cyclesphi-anari the difference is printed. Not part of the results in section 7 |
+| `test_camera_shift` | A lens shift moves the image as in Cycles (camera `imageRegion`). Not part of the results in section 7 |
+| `test_camera_clip` | An emissive plane nearer than the clip start lights the scene but is not seen, because only camera rays are clipped (camera `near`). Not part of the results in section 7 |
 | `test_environment_map` | An HDRI lights the scene and shows in the background, also rotated by 90° |
+| `test_world_camera_ray` | A world which camera rays see five times darker than the rays which light the scene (Mix Shader by Light Path *Is Camera Ray*): the backdrop is the background image of the renderer, not the environment light. Not part of the results in section 7 |
+| `test_device_denoiser` | The *Device Denoiser* setting is off by default; with it on, the noise of a render with four samples is printed against the one without (devices without a denoiser render the same). Not part of the results in section 7 |
 | `test_background` | World color, strength and transparent film, including changes during an existing render session |
 | `test_object_types` | Geometry nodes (instances, realized, points, curves, volume), particle instances and hair, hair curves, text, bevel curve, metaball and subdivision |
 | `test_instancing` | Linked duplicates share their geometry |
@@ -587,6 +635,20 @@ Each comparison prints a line such as
 
 The thresholds are strict for cyclesphi-anari (the same renderer) and loose for the other
 devices.
+
+`tests/python/anari_scene_compare.py` compares any .blend file with Cycles: it renders the
+file with Cycles and with an ANARI device (with shader graphs and with flattened materials),
+prints the brightness ratio and the relative difference, and writes the images side by side.
+`--override-material` and `--unlink-nodes` help to find what a difference comes from. The
+results for the Cycles demo scenes are in
+[MATERIALS.md](MATERIALS.md#56-what-the-smoke-test-shows).
+
+```bat
+build\blender\bin\Release\blender.exe --background --factory-startup --disable-autoexec -noaudio ^
+  --python blenderphi\tests\python\anari_scene_compare.py -- ^
+  --blend <file.blend> --library cycles --library-path F:\work\anari\install\bin ^
+  --device-parameters "computeDevice=optix" --outdir F:\work\anari\build\test_out\demo
+```
 
 The smoke tests can also be run for all configurations at once with
 [`tools/run_smoke_all.sh`](tools/run_smoke_all.sh), which uses the workspace paths above.
@@ -605,7 +667,7 @@ python blenderphi\doc\anari\tools\smoke_tables.py build\logs
 
 ## 7. Test results
 
-These are the results of the final run (2026-10-06) with all fixes from
+These are the results of the run of 2026-10-09 (the images are from 2026-10-06) with all fixes from
 [section 9](#9-changes-made-to-the-anari-devices) applied. They cover 160×120 images at
 32 samples per pixel on an RTX 2080 Ti and a 32-thread Xeon E5-2640 v3.
 
@@ -616,8 +678,9 @@ These are the results of the final run (2026-10-06) with all fixes from
   **photon**.
 * **rpr** renders on the GPU (Northstar with CUDA).
 
-All 14 configurations pass every test, except `test_environment_map` on helide.
-helide is the minimal ANARI reference device and has no `hdri` light.
+All 14 configurations pass every test, except `test_environment_map` and
+`test_camera_clip` on helide. helide is the minimal ANARI reference device: it has no
+`hdri` light and no clip planes.
 
 ### Test status
 
@@ -640,15 +703,15 @@ Cells are *brightness ratio / relative difference*; for texture mapping the patt
 
 | | cycles (CPU) | cycles (OptiX) | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CPU) | visionaray (CUDA) | ospray | rpr | photon (CUDA) | photon (CPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 1.036 / 0.412 | 0.949 / 0.632 | 0.876 / 0.739 | 1.066 / 0.068 | 1.059 / 0.060 | 0.518 / 0.819 | 1.146 / 0.338 | 1.227 / 0.776 | 1.059 / 0.057 | 1.053 / 0.074 | 1.021 / 0.081 | 1.021 / 0.081 |
-| texture mapping | 1.000 | 1.000 | 0.999 | 1.000 | 1.000 | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.040 / 0.056 | 1.030 / 0.049 | 1.030 / 0.049 | 1.111 / 0.123 | 1.086 / 0.098 | 1.303 / 0.469 | 1.097 / 0.117 | 1.097 / 0.117 | 0.941 / 0.169 | 1.088 / 0.102 | 0.999 / 0.051 | 0.999 / 0.051 |
-| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.045 / 0.511 | 1.025 / 0.499 | 1.025 / 0.499 | 1.123 / 0.596 | 1.066 / 0.077 | 4.664 / 1.665 | 1.109 / 0.584 | 1.107 / 0.582 | 0.944 / 0.074 | 1.052 / 0.525 | 1.011 / 0.478 | 1.011 / 0.478 |
-| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.975 / 0.031 | 0.952 / 0.051 | 0.952 / 0.050 | 1.041 / 0.046 | 1.005 / 0.008 | 0.389 / 0.725 | 1.022 / 0.036 | 1.022 / 0.036 | 0.875 / 0.186 | 1.022 / 0.027 | 0.966 / 0.039 | 0.966 / 0.039 |
-| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.982 / 0.037 | 0.973 / 0.044 | 0.973 / 0.044 | 1.043 / 0.046 | 1.007 / 0.008 | 0.953 / 0.065 | 0.971 / 0.034 | 0.971 / 0.034 | 1.113 / 0.113 | 1.007 / 0.010 | 0.974 / 0.043 | 0.974 / 0.043 |
-| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 0.996 / 0.014 | 0.978 / 0.062 | 0.978 / 0.061 | 0.999 / 0.005 | 0.995 / 0.017 | 2.241 / 1.666 | 0.988 / 0.047 | 0.988 / 0.047 | 0.997 / 0.040 | 0.998 / 0.009 | 0.993 / 0.031 | 0.993 / 0.031 |
-| environment 90 deg | 1.000 / 0.002 | 1.000 / 0.002 | 0.996 / 0.014 | 0.985 / 0.045 | 0.986 / 0.044 | 0.998 / 0.006 | 0.997 / 0.012 | 2.332 / 1.737 | 0.989 / 0.043 | 0.989 / 0.043 | 0.984 / 0.052 | 0.998 / 0.007 | 0.985 / 0.034 | 0.985 / 0.034 |
-| instancing | 0.001 | 0.001 | 0.020 | 0.024 | 0.024 | 0.008 | 0.007 | 0.041 | 0.010 | 0.010 | 0.039 | 0.002 | 0.022 | 0.022 |
+| basic render | 0.999 / 0.021 | 0.999 / 0.021 | 1.036 / 0.412 | 1.011 / 0.308 | 1.051 / 0.048 | 1.050 / 0.191 | 1.051 / 0.058 | 0.518 / 0.819 | 1.146 / 0.338 | 1.227 / 0.776 | 1.059 / 0.057 | 1.043 / 0.084 | 1.021 / 0.081 | 1.021 / 0.081 |
+| texture mapping | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.944 | 1.000 | 1.000 | 1.000 | 0.990 | 1.000 | 1.000 |
+| point light | 1.000 / 0.000 | 1.000 / 0.000 | 1.040 / 0.056 | 1.033 / 0.051 | 1.033 / 0.051 | 1.111 / 0.123 | 1.087 / 0.099 | 1.303 / 0.469 | 1.097 / 0.117 | 1.097 / 0.117 | 0.941 / 0.169 | 1.063 / 0.088 | 0.999 / 0.051 | 0.999 / 0.051 |
+| spot light | 1.000 / 0.009 | 1.000 / 0.009 | 1.044 / 0.511 | 1.034 / 0.501 | 1.034 / 0.501 | 1.123 / 0.596 | 1.069 / 0.074 | 4.664 / 1.665 | 1.109 / 0.584 | 1.107 / 0.582 | 0.944 / 0.074 | 1.021 / 0.490 | 1.011 / 0.478 | 1.011 / 0.478 |
+| area light | 1.000 / 0.000 | 1.000 / 0.000 | 0.975 / 0.031 | 0.966 / 0.039 | 0.967 / 0.039 | 1.041 / 0.046 | 1.005 / 0.008 | 0.389 / 0.725 | 1.022 / 0.036 | 1.022 / 0.036 | 0.875 / 0.186 | 0.998 / 0.037 | 0.966 / 0.039 | 0.966 / 0.039 |
+| sun light | 1.000 / 0.001 | 1.000 / 0.001 | 0.982 / 0.037 | 0.974 / 0.043 | 0.974 / 0.043 | 1.043 / 0.046 | 1.007 / 0.008 | 0.953 / 0.065 | 0.971 / 0.034 | 0.971 / 0.034 | 1.113 / 0.113 | 0.971 / 0.036 | 0.974 / 0.043 | 0.974 / 0.043 |
+| environment 0 deg | 1.000 / 0.002 | 1.000 / 0.002 | 0.996 / 0.014 | 0.995 / 0.017 | 0.996 / 0.014 | 0.999 / 0.005 | 0.995 / 0.016 | 2.241 / 1.666 | 0.988 / 0.047 | 0.988 / 0.047 | 0.997 / 0.040 | 0.996 / 0.012 | 0.993 / 0.031 | 0.993 / 0.031 |
+| environment 90 deg | 1.000 / 0.001 | 1.000 / 0.001 | 0.996 / 0.014 | 0.996 / 0.014 | 0.997 / 0.012 | 0.998 / 0.006 | 0.996 / 0.012 | 2.332 / 1.737 | 0.989 / 0.043 | 0.989 / 0.043 | 0.984 / 0.052 | 0.997 / 0.010 | 0.985 / 0.034 | 0.985 / 0.034 |
+| instancing | 0.001 | 0.001 | 0.020 | 0.021 | 0.021 | 0.008 | 0.007 | 0.041 | 0.010 | 0.010 | 0.039 | 0.002 | 0.022 | 0.022 |
 
 ### Object types
 
@@ -656,18 +719,28 @@ Cells are *mask coverage / brightness ratio / relative difference*.
 
 | | cycles (CPU) | cycles (OptiX) | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CPU) | visionaray (CUDA) | ospray | rpr | photon (CUDA) | photon (CPU) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.990 / 0.034 | 1.000 / 0.993 / 0.026 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.003 | 1.000 / 1.026 / 0.118 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
-| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.023 | 1.000 / 0.990 / 0.034 | 1.000 / 0.993 / 0.026 | 1.000 / 1.001 / 0.006 | 1.000 / 0.999 / 0.002 | 1.000 / 1.028 / 0.133 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
-| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.009 | 1.000 / 0.987 / 0.034 | 1.000 / 0.992 / 0.023 | 1.000 / 1.001 / 0.008 | 1.000 / 0.999 / 0.003 | 1.000 / 1.030 / 0.102 | 1.000 / 1.001 / 0.010 | 1.000 / 1.000 / 0.009 | 1.000 / 0.993 / 0.021 | 1.000 / 1.000 / 0.004 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 |
-| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.010 | 1.000 / 0.984 / 0.044 | 1.000 / 0.992 / 0.025 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.036 / 0.128 | 0.987 / 0.999 / 0.017 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
-| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 1.000 / 0.983 / 0.055 | 0.997 / 1.120 / 0.411 | 0.999 / 0.999 / 0.013 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.004 | 0.992 / 1.121 / 0.411 | 0.999 / 0.985 / 0.053 | 0.998 / 0.986 / 0.053 | 1.000 / 1.020 / 0.059 | 0.995 / 1.019 / 0.052 | 0.999 / 1.019 / 0.055 | 0.999 / 1.019 / 0.055 |
-| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 0.999 / 0.006 | 1.000 / 0.994 / 0.032 | 1.000 / 0.997 / 0.019 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.002 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.006 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.015 | 1.000 / 1.001 / 0.002 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 |
-| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 0.999 / 0.007 | 0.998 / 0.987 / 0.048 | 1.000 / 0.994 / 0.025 | 0.997 / 0.995 / 0.022 | 1.000 / 1.007 / 0.029 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.007 | 0.997 / 1.001 / 0.006 | 1.000 / 0.996 / 0.016 | 1.000 / 1.001 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
-| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.023 | 1.000 / 0.982 / 0.051 | 1.000 / 0.992 / 0.031 | 1.000 / 1.001 / 0.022 | 1.000 / 1.023 / 0.069 | 1.000 / 1.060 / 0.184 | 1.000 / 1.003 / 0.020 | 1.000 / 1.002 / 0.019 | 0.999 / 0.992 / 0.032 | 1.000 / 1.001 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
-| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.007 | 1.000 / 0.997 / 0.013 | 1.000 / 0.997 / 0.013 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.009 / 0.043 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.006 | 1.000 / 0.995 / 0.021 | 1.000 / 1.001 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
-| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.004 / 0.018 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.009 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 1.021 / 0.079 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.990 / 0.038 | 1.000 / 1.001 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 |
-| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.020 | 1.000 / 0.996 / 0.016 | 1.000 / 0.997 / 0.017 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.015 / 0.125 | 1.000 / 1.000 / 0.010 | 1.000 / 1.000 / 0.010 | 1.000 / 0.995 / 0.033 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 |
-| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.021 | 1.000 / 0.997 / 0.015 | 1.000 / 0.996 / 0.019 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.013 / 0.119 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.996 / 0.036 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 0.997 / 0.015 |
+| gn_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.022 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.026 / 0.118 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
+| gn_realized | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.022 | 1.000 / 0.991 / 0.032 | 1.000 / 0.995 / 0.022 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.003 | 1.000 / 1.028 / 0.133 | 1.000 / 1.003 / 0.014 | 1.000 / 1.003 / 0.013 | 1.000 / 1.000 / 0.014 | 1.000 / 1.001 / 0.004 | 1.000 / 0.994 / 0.025 | 1.000 / 0.994 / 0.025 |
+| gn_points | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.009 | 1.000 / 0.989 / 0.028 | 1.000 / 0.996 / 0.010 | 1.000 / 1.001 / 0.008 | 1.000 / 1.000 / 0.003 | 1.000 / 1.030 / 0.102 | 1.000 / 1.001 / 0.010 | 1.000 / 1.000 / 0.009 | 1.000 / 0.993 / 0.021 | 1.000 / 1.001 / 0.003 | 1.000 / 0.995 / 0.015 | 1.000 / 0.995 / 0.015 |
+| gn_curves | 1.000 / 1.000 / 0.002 | 1.000 / 1.000 / 0.002 | 1.000 / 1.001 / 0.011 | 1.000 / 0.987 / 0.035 | 1.000 / 0.998 / 0.015 | 1.000 / 1.000 / 0.007 | 1.000 / 1.022 / 0.076 | 1.000 / 1.036 / 0.128 | 0.987 / 0.999 / 0.017 | 0.987 / 0.999 / 0.016 | 1.000 / 0.992 / 0.026 | 1.000 / 1.000 / 0.005 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
+| gn_volume | 0.984 / 1.000 / 0.003 | 0.984 / 1.000 / 0.003 | 1.000 / 0.983 / 0.056 | 0.997 / 1.121 / 0.411 | 0.998 / 1.017 / 0.051 | 0.999 / 1.018 / 0.053 | 1.000 / 1.001 / 0.005 | 0.992 / 1.121 / 0.411 | 0.999 / 0.985 / 0.053 | 0.998 / 0.986 / 0.053 | 1.000 / 1.020 / 0.059 | 0.995 / 1.019 / 0.054 | 0.999 / 1.019 / 0.055 | 0.999 / 1.019 / 0.055 |
+| particle_instances | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 0.999 / 0.006 | 1.000 / 0.995 / 0.028 | 1.000 / 0.998 / 0.010 | 1.000 / 1.001 / 0.006 | 1.000 / 1.000 / 0.001 | 1.000 / 1.012 / 0.078 | 1.000 / 1.000 / 0.006 | 1.000 / 1.000 / 0.004 | 1.000 / 0.997 / 0.015 | 1.000 / 1.001 / 0.003 | 1.000 / 0.997 / 0.019 | 1.000 / 0.997 / 0.019 |
+| particle_hair | 1.000 / 1.001 / 0.006 | 1.000 / 1.001 / 0.006 | 0.999 / 0.999 / 0.007 | 0.999 / 0.990 / 0.039 | 1.000 / 0.999 / 0.008 | 0.999 / 0.995 / 0.021 | 0.999 / 1.006 / 0.027 | 0.915 / 1.009 / 0.047 | 0.999 / 1.001 / 0.007 | 0.997 / 1.001 / 0.006 | 1.000 / 0.996 / 0.016 | 0.999 / 1.002 / 0.005 | 0.997 / 0.996 / 0.014 | 0.997 / 0.996 / 0.014 |
+| hair_curves | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.021 | 1.000 / 1.002 / 0.023 | 1.000 / 0.986 / 0.040 | 1.000 / 1.000 / 0.021 | 1.000 / 1.002 / 0.022 | 1.000 / 1.024 / 0.070 | 1.000 / 1.060 / 0.184 | 1.000 / 1.003 / 0.020 | 1.000 / 1.002 / 0.019 | 0.999 / 0.992 / 0.032 | 1.000 / 1.002 / 0.021 | 1.000 / 0.999 / 0.022 | 1.000 / 0.999 / 0.022 |
+| text | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.001 / 0.007 | 1.000 / 1.000 / 0.017 | 1.000 / 1.000 / 0.012 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.002 | 1.000 / 1.009 / 0.043 | 1.000 / 1.000 / 0.005 | 1.000 / 1.000 / 0.006 | 1.000 / 0.995 / 0.021 | 1.000 / 1.002 / 0.002 | 1.000 / 0.998 / 0.010 | 1.000 / 0.998 / 0.010 |
+| bevel_curve | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.004 / 0.018 | 1.000 / 1.006 / 0.036 | 1.000 / 1.014 / 0.081 | 1.000 / 1.000 / 0.007 | 1.000 / 0.999 / 0.004 | 1.000 / 1.022 / 0.080 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.990 / 0.038 | 1.000 / 1.001 / 0.004 | 1.000 / 0.997 / 0.012 | 1.000 / 0.997 / 0.012 |
+| metaball | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.020 | 1.000 / 0.997 / 0.015 | 1.000 / 1.000 / 0.020 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.015 / 0.125 | 1.000 / 1.000 / 0.010 | 1.000 / 1.000 / 0.010 | 1.000 / 0.995 / 0.033 | 1.000 / 1.001 / 0.003 | 1.000 / 0.998 / 0.012 | 1.000 / 0.998 / 0.012 |
+| subdivision | 1.000 / 1.000 / 0.001 | 1.000 / 1.000 / 0.001 | 1.000 / 1.003 / 0.021 | 1.000 / 0.998 / 0.013 | 1.000 / 0.998 / 0.013 | 1.000 / 1.000 / 0.008 | 1.000 / 1.000 / 0.002 | 1.000 / 1.013 / 0.119 | 1.000 / 1.000 / 0.011 | 1.000 / 1.000 / 0.011 | 1.000 / 0.996 / 0.036 | 1.000 / 1.002 / 0.003 | 1.000 / 0.997 / 0.015 | 1.000 / 0.997 / 0.015 |
+
+### Camera and normal map tests
+
+Added on 2026-10-09. Cells are the relative difference to Cycles; for the clip start and the normal map *brightness ratio / relative difference*. Compare them with the basic render of the device: a lens shift or a clip start which is not applied gives 0.8 to 1.2 and more.
+
+| | cycles | barney | visrtx (default) | visrtx (quality) | mitsuba (cuda) | moonray | helide | visionaray (CUDA) | ospray | rpr | photon |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| lens shift | 0.014 | 0.457 | 0.305 | 0.074 | 0.181 | 0.043 | 0.816 | 0.366 | 0.061 | 0.085 | 0.080 |
+| clip start | 0.999 / 0.020 | 1.354 / 0.291 | 1.003 / 0.287 | 1.047 / 0.048 | 1.014 / 0.187 | 1.051 / 0.052 | 0.000 / 1.000 | 1.165 / 0.346 | 1.067 / 0.058 | 1.007 / 0.079 | 1.013 / 0.074 |
+| normal map | 1.000 / 0.001 | 0.606 / 0.428 | 1.050 / 0.052 | 1.133 / 0.135 | 1.143 / 0.695 | 1.051 / 0.049 | 2.356 / 1.201 | 1.123 / 0.695 | 0.609 / 0.394 | 1.053 / 0.051 | 1.143 / 0.695 |
 
 ### Images
 
@@ -744,8 +817,8 @@ reference image. Transparent pixels are shown over a checkerboard.
   * The first frame of a scene builds RPR's acceleration structures, about 4–5 s per
     million triangles, so scene changes are slower than with the other GPU devices.
   * Only the color and depth channels are provided. The normal, albedo and id channels
-    are not, and `unstructured` fields, the `primitive` sampler and the camera
-    `imageRegion` are not supported: they warn.
+    are not, and `unstructured` fields and the `primitive` sampler are not supported: they
+    warn.
   * The OpenCL back-end (`computeDevice=opencl`) fails to compile its kernels on this
     GPU. It is never selected automatically.
 * **Photon** gives the same metrics on the GPU and on the CPU (the same kernels and
@@ -766,11 +839,48 @@ reference image. Transparent pixels are shown over a checkerboard.
   * The exporter keeps the opacity range small (≤ 0.01), so both the
     specification's `-ln(1 - opacity) / unitDistance` and the linear
     `opacity / unitDistance` used by some devices give that extinction.
-* **Materials.** Shaders are converted to a single `physicallyBased` (or `matte`) material.
+* **Materials.** On cyclesphi-anari, RadeonProRenderANARI and openmoonray-anari the shader
+  node graph is sent as text, as far as the device and the export can express it; see
+  [MATERIALS.md](MATERIALS.md#5-shader-graphs-as-text). On the other devices, and as the
+  fallback, shaders are converted to a single `physicallyBased` (or `matte`) material.
   Image textures (with mapping), vertex colors and constants are supported, and mixed
-  closures are blended into one material. Procedural textures and other unsupported nodes
-  fall back to their default input value. Procedural world shaders (e.g. sky textures)
-  become a constant gray background, with a warning.
+  closures are blended into one material. Color nodes which are not linear (Hue/Saturation,
+  curves, gamma, color ramps) are approximated by the linear transform of the sampler which
+  fits the colors of the texture best. What a sampler can't express (procedural colors,
+  the mask of a Mix Shader, emission) is evaluated by the Cycles kernel in Blender and
+  baked into a texture or vertex colors.
+* **MoonRay materials.** The node graph is translated by Blender to networks of the classes
+  MoonRay and moonshine have; the device contains nothing of Cycles. Most nodes come out
+  the same within noise. Noise and Voronoi textures have the same character but another
+  pattern, and some shading models differ (anisotropy, sheen, rough diffuse, subsurface).
+  MoonRay does not sample emissive meshes as lights: scenes lit by emissive planes or lamp
+  meshes are noisy there. Details in [MATERIALS.md](MATERIALS.md#55-rdla-graph_rdlacpp).
+* **World.** An Environment Texture and a constant color are exported as they are. Any other
+  world shader (sky texture, procedural, mixed backgrounds) is evaluated by the Cycles
+  kernel into an environment image, and the sun of a sky texture becomes a directional
+  light. A world which the camera sees differently than the rays which light the scene
+  (Light Path *Is Camera Ray*, or hidden from diffuse rays) is shown as the background image
+  of the renderer; with a panoramic camera the camera sees the lighting. On cyclesphi-anari
+  the world shader is sent as a graph instead.
+* **Fast GI** exists on cyclesphi-anari only. The other devices end the paths at its number
+  of bounces, without the ambient occlusion lookup of the world.
+* **Lights.** ANARI lights fall off with the inverse square of the distance. A light whose
+  shader changes the falloff (Light Falloff node, Light Path *Ray Length*) gets one average
+  strength; the light is distributed differently than in Cycles. Lights which cast no
+  shadow do cast one, and *Max Bounces* of a light is ignored. cyclesphi-anari gets the
+  light shaders as graphs and has both settings (`castShadow`, `maxBounce`).
+* **Ray visibility** of objects (camera, shadow, diffuse, ...) is sent to cyclesphi-anari,
+  openmoonray-anari and RadeonProRenderANARI. On the other devices an object hidden from
+  camera or shadow rays is left out, unless it emits light. The ray visibility of lights
+  and of the world is only sent to cyclesphi-anari; elsewhere a light or a world which
+  diffuse rays don't see is left out, and the others light everything (a light hidden
+  from glossy rays shows up in mirrors).
+* **Mesh attributes.** A material can read four attributes of a mesh (UV maps, color and
+  generic attributes, generated coordinates, pointiness), eight on cyclesphi-anari. Further
+  ones are dropped with a warning.
+* **Camera clipping** (`near`, `far`) only clips camera rays in Cycles: a scene may have a
+  light card right in front of the camera. A device which ignores the clip planes renders
+  that card instead of the scene.
 * **Viewport.** Every ANARI device renders the viewport progressively. A scene change
   re-syncs only what changed (objects, lights, world, camera).
 
@@ -1023,3 +1133,26 @@ It was replaced, and the path tracer needed fixes to render with the right brigh
   * New: alpha, ambient light, volumes, refraction, and barycentric coordinates from all
     back-ends.
 
+**Since 2026-10-09 (working tree changes, not committed)**
+
+These came out of rendering the Cycles demo scenes, see [TODO.md](TODO.md#6-real-scenes):
+
+* **blenderphi.** Shader graphs as text ([MATERIALS.md](MATERIALS.md#5-shader-graphs-as-text));
+  the ANARI device is derived from the CPU device; world shaders are baked; non-linear
+  color nodes are fitted; ray visibility, bounce limits and clamps are sent to devices
+  which declare them; light cards; the normal map sampler is not decoded any more.
+* **cyclesphi-anari.** Material subtype `cyclesXml`, light and world graphs
+  (`CYCLES_SHADER_XML`), instance visibility, camera `near` / `far` / `imageRegion`.
+* **RadeonProRenderANARI.** Material subtype `materialx`; instance visibility; camera
+  `imageRegion`; renderer `maxBounce`, `maxDiffuseBounce`, `clampIndirect`; RPR
+  instances are kept across scene updates.
+* **openmoonray-anari.** Material subtype `rdla` (with moonshine); textures from memory;
+  instance visibility; camera `imageRegion`; sampler output transforms and textured
+  roughness, metallic, clearcoat, emission, normal and opacity; `attribute1..3` and the
+  `transform` sampler; the bounce limits and clamps. MoonRay core: perspective and
+  orthographic cameras in one process (`ProjectiveCamera.cc`).
+* **barney, anari-visionaray, Photon.** Camera `near` / `far` (barney: also for the
+  orthographic camera, where they were read but not used).
+* **VisRTX.** Camera `near` / `far`; `matte` bounces light.
+* **mitsuba-anari.** Camera `near` / `far` and `imageRegion`; the orthographic camera
+  for frames which are not square.

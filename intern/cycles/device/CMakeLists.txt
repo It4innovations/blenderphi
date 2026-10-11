@@ -94,6 +94,10 @@ set(SRC_ANARI
   anari/device.h
   anari/device_impl.cpp
   anari/device_impl.h
+  anari/graph_export.h
+  anari/graph_materialx.cpp
+  anari/graph_rdla.cpp
+  anari/graph_xml.cpp
   anari/material.cpp
   anari/material.h
   anari/scene.cpp

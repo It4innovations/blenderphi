@@ -8,6 +8,7 @@
 
 #  include <anari/anari.h>
 
+#  include "device/cpu/device_impl.h"
 #  include "device/device.h"
 
 #  include "util/map.h"
@@ -95,7 +96,11 @@ struct AnariImage {
   uint64_t version = 0;
 };
 
-class AnariDevice : public Device {
+/* The scene data stays in host memory like for the CPU device, which this device is derived from:
+ * the scene export reads it from there, and the CPU kernels of Cycles evaluate shaders where
+ * the scene update needs it (displacement) and where the export does (baking the world shader
+ * for devices which only take an environment image). Rendering is done by the ANARI device. */
+class AnariDevice : public CPUDevice {
  public:
   AnariDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool headless_);
   ~AnariDevice() override;
@@ -103,20 +108,11 @@ class AnariDevice : public Device {
   /* Device. */
   BVHLayoutMask get_bvh_layout_mask(uint64_t kernel_features) const override;
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
-  void const_copy_to(const char *name, void *host, const size_t size) override;
   bool load_kernels(uint64_t kernel_features) override;
 
   void prepare_scene_update(Scene *scene) override;
   void optimize_for_scene(Scene *scene) override;
-
-  bool has_unified_memory_any() const override
-  {
-    return true;
-  }
-  bool has_unified_image_memory_all() const override
-  {
-    return true;
-  }
+  bool use_materialx_shaders() const override;
 
   /* ANARI handles. */
   ANARIDevice anari_device() const
@@ -132,10 +128,28 @@ class AnariDevice : public Device {
   {
     return renderer_subtype_;
   }
+  /* Whether shader graphs are sent to devices which take them, false to always flatten the
+   * materials. Set with the "materials" parameter. */
+  bool use_graph_materials() const
+  {
+    return use_graph_materials_;
+  }
+  /* Whether the denoiser built into the renderer of the device is used, on devices which have
+   * one. Off unless set with the "denoise" parameter. */
+  bool use_device_denoiser() const
+  {
+    return use_device_denoiser_;
+  }
 
   /* Whether the device has an extension or supports an object subtype. */
   bool has_extension(const char *name) const;
   bool has_subtype(ANARIDataType type, const char *subtype) const;
+  /* Whether the device declares a parameter of an object subtype, for parameters beyond the
+   * ANARI standard which several devices have. */
+  bool has_parameter(ANARIDataType type,
+                     const char *subtype,
+                     const char *name,
+                     ANARIDataType parameter_type) const;
 
   /* Rendering, used by PathTraceWorkANARI. */
 
@@ -166,19 +180,11 @@ class AnariDevice : public Device {
   /* Images, used by the scene export. */
   const AnariImage *find_image(uint image_info_id) const;
 
- protected:
-  void mem_alloc(device_memory &mem) override;
+  /* Memory: as in the CPU device, and images are recorded for the scene export. */
   void mem_copy_to(device_memory &mem) override;
-  void mem_move_to_host(device_memory &mem) override;
-  void mem_copy_from(
-      device_memory &mem, const size_t y, size_t w, const size_t h, size_t elem) override;
-  void mem_zero(device_memory &mem) override;
   void mem_free(device_memory &mem) override;
-  device_ptr mem_alloc_sub_ptr(device_memory &mem, const size_t offset, size_t size) override;
 
-  void image_alloc(device_image &mem);
-  void image_free(device_image &mem);
-
+ protected:
   static void status_callback(const void *user_data,
                               ANARIDevice device,
                               ANARIObject source,
@@ -191,6 +197,16 @@ class AnariDevice : public Device {
   ANARIDevice device_ = nullptr;
   string library_short_name_;
   string renderer_subtype_ = "default";
+  bool use_graph_materials_ = true;
+  bool use_device_denoiser_ = false;
+
+  /* Time spent in the device and in mapping frame channels, printed with the trace. */
+  double time_first_render_ = 0.0;
+  double time_first_device_ = 0.0;
+  double time_render_ = 0.0;
+  double time_device_ = 0.0;
+  double time_map_ = 0.0;
+  int timed_frames_ = 0;
   set<string> extensions_;
   bool accumulates_samples_ = false;
 

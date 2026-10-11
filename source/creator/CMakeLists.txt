@@ -811,6 +811,37 @@ if(UNIX AND NOT APPLE)
     )
   endif()
 
+  if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI AND TARGETDIR_LIB)
+    # ANARI front-end library, installed with the bundled libraries where the rpath of
+    # Blender (`$ORIGIN/lib`) finds it, under its soname (`libanari.so.<major>`). Back-end
+    # libraries are found in the paths configured in the ANARI add-on preferences.
+    get_target_property(_anari_lib anari::anari IMPORTED_LOCATION_RELEASE)
+    if(NOT _anari_lib)
+      get_target_property(_anari_lib anari::anari IMPORTED_LOCATION)
+    endif()
+    get_target_property(_anari_soname anari::anari IMPORTED_SONAME_RELEASE)
+    if(NOT _anari_soname)
+      get_target_property(_anari_soname anari::anari IMPORTED_SONAME)
+    endif()
+    if(_anari_lib)
+      if(_anari_soname)
+        get_filename_component(_anari_soname "${_anari_soname}" NAME)
+        install(
+          FILES ${_anari_lib}
+          DESTINATION ${TARGETDIR_LIB}
+          RENAME ${_anari_soname}
+        )
+      else()
+        install(
+          FILES ${_anari_lib}
+          DESTINATION ${TARGETDIR_LIB}
+        )
+      endif()
+    endif()
+    unset(_anari_lib)
+    unset(_anari_soname)
+  endif()
+
   # There are a few differences between portable and system install.
   if(WITH_PYTHON_MODULE)
     if(WITH_INSTALL_PORTABLE)
@@ -1901,6 +1932,38 @@ elseif(APPLE)
       FILES ${PLATFORM_BUNDLED_LIBRARIES}
       DESTINATION ${TARGETDIR_LIB}
     )
+  endif()
+
+  if(WITH_CYCLES AND WITH_CYCLES_DEVICE_ANARI AND TARGETDIR_LIB)
+    # ANARI front-end library, installed with the bundled libraries where the rpath of
+    # Blender finds it. Back-end libraries are found in the paths configured in the ANARI
+    # add-on preferences.
+    get_target_property(_anari_lib anari::anari IMPORTED_LOCATION_RELEASE)
+    if(NOT _anari_lib)
+      get_target_property(_anari_lib anari::anari IMPORTED_LOCATION)
+    endif()
+    get_target_property(_anari_soname anari::anari IMPORTED_SONAME_RELEASE)
+    if(NOT _anari_soname)
+      get_target_property(_anari_soname anari::anari IMPORTED_SONAME)
+    endif()
+    if(_anari_lib)
+      if(_anari_soname)
+        # Under the file name of its install name (`@rpath/libanari.<major>.dylib`).
+        get_filename_component(_anari_soname "${_anari_soname}" NAME)
+        install(
+          FILES ${_anari_lib}
+          DESTINATION ${TARGETDIR_LIB}
+          RENAME ${_anari_soname}
+        )
+      else()
+        install(
+          FILES ${_anari_lib}
+          DESTINATION ${TARGETDIR_LIB}
+        )
+      endif()
+    endif()
+    unset(_anari_lib)
+    unset(_anari_soname)
   endif()
 
   if(WITH_VULKAN_BACKEND)

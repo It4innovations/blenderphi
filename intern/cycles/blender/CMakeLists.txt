@@ -106,6 +106,11 @@ if(WITH_MOD_FLUID)
   add_definitions(-DWITH_FLUID)
 endif()
 
+if(WITH_MATERIALX)
+  # MaterialX documents of materials for the ANARI device, see `sync_materials`.
+  add_definitions(-DWITH_MATERIALX)
+endif()
+
 blender_add_lib(bf_intern_cycles "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
 
 add_dependencies(bf_intern_cycles bf_rna)
