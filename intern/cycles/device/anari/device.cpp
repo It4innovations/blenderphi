@@ -40,6 +40,9 @@ const char *const known_library_names[] = {
     "rpr",
     "photon",
     "usd",
+    /* Scene capture of Vela: mirrors the scene into a VSR Scene Archive (`live_capture.vsr` in the
+     * working directory) and renders with the back-end named by `ANARI_VSR_LIBRARY`. */
+    "vsr",
 };
 
 thread_mutex search_paths_mutex;

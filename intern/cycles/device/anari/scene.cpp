@@ -3796,7 +3796,11 @@ void AnariScene::sync_renderer(Scene *scene)
    * of the render are applied by Cycles on this side. barney does not list the parameter of
    * its renderer. */
   const bool denoise = device_.use_device_denoiser();
-  if (device_.library_name() == "barney" ||
+  /* The capture device of Vela describes the scene it mirrors, not the back-end it renders
+   * with: it keeps every parameter and passes it on, and a back-end ignores what it does not
+   * know. The settings of the renderer are sent to it without asking. */
+  const bool capture_device = device_.library_name() == "vsr";
+  if (device_.library_name() == "barney" || capture_device ||
       device_.has_parameter(
           ANARI_RENDERER, device_.renderer_subtype().c_str(), "denoise", ANARI_BOOL))
   {
@@ -3836,7 +3840,9 @@ void AnariScene::sync_renderer(Scene *scene)
         {"maxTransparencyBounce", integrator->get_transparent_max_bounce()},
     };
     for (const auto &limit : limits) {
-      if (device_.has_parameter(ANARI_RENDERER, subtype, limit.first, ANARI_INT32)) {
+      if (capture_device ||
+          device_.has_parameter(ANARI_RENDERER, subtype, limit.first, ANARI_INT32))
+      {
         anariSetParameter(d, renderer_, limit.first, ANARI_INT32, &limit.second);
       }
     }
@@ -3845,7 +3851,9 @@ void AnariScene::sync_renderer(Scene *scene)
         {"clampIndirect", integrator->get_sample_clamp_indirect()},
     };
     for (const auto &clamp : clamps) {
-      if (device_.has_parameter(ANARI_RENDERER, subtype, clamp.first, ANARI_FLOAT32)) {
+      if (capture_device ||
+          device_.has_parameter(ANARI_RENDERER, subtype, clamp.first, ANARI_FLOAT32))
+      {
         anariSetParameter(d, renderer_, clamp.first, ANARI_FLOAT32, &clamp.second);
       }
     }

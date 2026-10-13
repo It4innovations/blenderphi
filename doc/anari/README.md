@@ -18,6 +18,7 @@ back-end. Any ANARI library can be used. The ones built and tested here are:
 | `ospray` | [anari-ospray](https://github.com/jar091/anari-ospray): Intel OSPRay | CPU |
 | `rpr` | [RadeonProRenderANARI](https://github.com/jar091/RadeonProRenderANARI): AMD Radeon ProRender (Northstar) | GPU (CUDA on NVIDIA, HIP on AMD), CPU fallback |
 | `photon` | [Photon](https://github.com/jar091/photon): Kokkos path tracer | CUDA with OptiX, or CPU with Embree (two builds of the same library) |
+| `vsr` | Scene capture device of Vela (`src/anari_vsr`): writes the scene to `live_capture.vsr` in the working directory, to be opened in `vsrViewer`, and renders with another device | The back-end named by the environment variable `ANARI_VSR_LIBRARY` (`helide` if not set) |
 
 This document describes what is the same on every platform: how the device works, how it
 is used in Blender, what the smoke tests check and what the known limits are. Where the
@@ -121,7 +122,12 @@ own documents per platform in the pynari repository (`pynari/doc/windows`, `doc/
 
    The preferences list the ANARI devices that were found. **Additional Libraries** adds
    library names to probe beyond the known back-ends (barney, cycles, mitsuba, moonray,
-   visrtx, helide, ospray, visionaray, visionaray_cuda, rpr, photon).
+   visrtx, helide, ospray, visionaray, visionaray_cuda, rpr, photon, usd, vsr).
+
+   The `vsr` device does not render by itself: start Blender with `ANARI_VSR_LIBRARY` set
+   to the device to render with (for example `barney`). It describes the scene it captures
+   and not that back-end, so Blender sends it the path length limits and the clamping of the
+   renderer without asking; everything else follows what the `vsr` device declares.
 
 2. **Select the engine and device.** In *Render Properties*, set **Render Engine** to
    **ANARI** and pick the **Device**. Viewport rendering and final renders both work. The
