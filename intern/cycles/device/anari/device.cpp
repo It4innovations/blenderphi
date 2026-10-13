@@ -39,6 +39,7 @@ const char *const known_library_names[] = {
     "visionaray_cuda",
     "rpr",
     "photon",
+    "usd",
 };
 
 thread_mutex search_paths_mutex;
